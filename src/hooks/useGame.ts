@@ -133,7 +133,7 @@ export function useGame(): GameState {
     // a specific column, bypassing the real AI and the Web Worker.
     // This runs in the main thread so the window variable is always reachable.
     if (typeof window !== "undefined") {
-      const e2eCol = (window as Record<string, unknown>).__TEST_AI_COL;
+      const e2eCol = (window as unknown as Record<string, unknown>).__TEST_AI_COL;
       if (typeof e2eCol === "number") {
         const id = setTimeout(() => processAIMove(e2eCol), 300);
         return () => clearTimeout(id);

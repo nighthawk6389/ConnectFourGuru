@@ -99,6 +99,22 @@ All tests run with `npm test`. The AI mock (`jest.mock('@/lib/ai', ...)`) keeps 
 
 ---
 
+## Dev Cycle — Significant Changes
+
+For any non-trivial change (new feature, refactor, config edit), run **all three** before committing:
+
+```bash
+npm test          # 145 Jest tests must pass
+npm run lint      # ESLint must report no errors
+npm run build     # Production build + TypeScript check must succeed
+```
+
+> `npm run build` catches TypeScript errors that Jest misses (e.g. strict type
+> casts, config files included in the TS project). Always run it before pushing
+> to avoid Vercel deployment failures.
+
+---
+
 ## Adding New Features
 
 1. **New AI heuristic** → modify `src/lib/ai.ts` (`scoreBoard` or `negamax`)
