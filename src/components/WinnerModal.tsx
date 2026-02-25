@@ -55,20 +55,18 @@ export default function WinnerModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-gray-900 border border-white/10 rounded-2xl p-8 flex flex-col items-center gap-5 shadow-2xl max-w-xs w-full mx-4 animate-pop">
-        <span className="text-6xl">{emoji}</span>
-        <div className="text-center">
-          <h2 className={`text-3xl font-bold ${accentColor}`}>{headline}</h2>
-          <p className="text-gray-400 mt-1">{subline}</p>
-        </div>
-        <button
-          onClick={onNewGame}
-          className="px-8 py-3 rounded-full bg-blue-500 hover:bg-blue-400 active:scale-95 text-white font-semibold text-lg transition-all shadow-lg"
-        >
-          Play Again
-        </button>
+    <div className="bg-gray-900 border border-white/10 rounded-2xl px-8 py-5 flex flex-row items-center gap-6 shadow-2xl w-full max-w-md mx-4 animate-pop">
+      <span className="text-5xl">{emoji}</span>
+      <div className="flex-1 text-center">
+        <h2 className={`text-2xl font-bold ${accentColor}`}>{headline}</h2>
+        <p className="text-gray-400 text-sm mt-0.5">{subline}</p>
       </div>
+      <button
+        onClick={onNewGame}
+        className="px-6 py-2.5 rounded-full bg-blue-500 hover:bg-blue-400 active:scale-95 text-white font-semibold text-base transition-all shadow-lg shrink-0"
+      >
+        Play Again
+      </button>
     </div>
   );
 }

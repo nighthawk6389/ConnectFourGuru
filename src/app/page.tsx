@@ -47,6 +47,9 @@ export default function Home() {
       {/* Score */}
       <ScoreBoard score={score} />
 
+      {/* End-of-game banner — appears above the board */}
+      <WinnerModal winResult={winResult} isDraw={draw} onNewGame={newGame} />
+
       {/* Board */}
       <Board
         board={board}
@@ -64,9 +67,6 @@ export default function Home() {
         onNewGame={newGame}
         thinking={phase === "thinking"}
       />
-
-      {/* End-of-game modal */}
-      <WinnerModal winResult={winResult} isDraw={draw} onNewGame={newGame} />
     </main>
   );
 }
