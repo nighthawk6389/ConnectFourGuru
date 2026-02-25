@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Board, Difficulty, PLAYER, AI } from "@/lib/constants";
 import { emptyBoard, dropPiece, checkWin, isDraw, WinResult } from "@/lib/game";
-import { getBestMove } from "@/lib/ai";
+import { getBestMove, clearTranspositionTable } from "@/lib/ai";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -87,10 +87,35 @@ export function useGame(): GameState {
   const difficultyRef = useRef<Difficulty>(difficulty);
   difficultyRef.current = difficulty;
 
+  // Persistent Web Worker — kept alive between moves so the module-level
+  // transposition table inside the worker survives across searches.
+  const workerRef = useRef<Worker | null>(null);
+
+  // Move ID counter — incremented on each AI move request, newGame, and
+  // setDifficulty.  The worker echoes the ID back so stale results from a
+  // cancelled/superseded search are safely ignored.
+  const moveIdRef = useRef(0);
+
   // Persist score to localStorage whenever it changes
   useEffect(() => {
     saveScore(score);
   }, [score]);
+
+  // Create the persistent worker on mount, terminate on unmount
+  useEffect(() => {
+    if (typeof Worker === "undefined") return;
+    try {
+      workerRef.current = new Worker(
+        new URL("../lib/ai.worker.ts", import.meta.url)
+      );
+    } catch {
+      // Worker construction failed (CSP, bundler issue) — sync fallback
+    }
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
+  }, []);
 
   const endGame = useCallback((result: WinResult, currentBoard: Board) => {
     setWinResult(result);
@@ -108,15 +133,16 @@ export function useGame(): GameState {
   }, []);
 
   // AI move — runs whenever phase becomes "thinking".
-  // Uses a Web Worker when available so the search never blocks the main thread.
-  // Falls back to a synchronous setTimeout call (also used in Jest/jsdom where
-  // Worker is undefined).
+  // Uses the persistent Web Worker when available so the search never blocks
+  // the main thread.  Falls back to a synchronous setTimeout call (also used
+  // in Jest/jsdom where Worker is undefined).
   useEffect(() => {
     if (phase !== "thinking") return;
 
     // Capture board & difficulty at the moment this effect fires
     const currentBoard = board;
     const currentDifficulty = difficultyRef.current;
+    const currentMoveId = ++moveIdRef.current;
 
     const processAIMove = (col: number) => {
       const next = dropPiece(currentBoard, col, AI);
@@ -140,34 +166,40 @@ export function useGame(): GameState {
       }
     }
 
-    // Try Web Worker path (non-blocking)
-    if (typeof Worker !== "undefined") {
-      let worker: Worker | null = null;
-      try {
-        worker = new Worker(
-          new URL("../lib/ai.worker.ts", import.meta.url)
-        );
+    // Try persistent Web Worker path (non-blocking)
+    const worker = workerRef.current;
+    if (worker) {
+      const onMessage = (e: MessageEvent<{ col: number; moveId: number }>) => {
+        if (e.data.moveId !== currentMoveId) return; // stale result
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+        processAIMove(e.data.col);
+      };
 
-        worker.onmessage = (e: MessageEvent<{ col: number }>) => {
-          processAIMove(e.data.col);
-        };
+      const onError = () => {
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+        // Terminate broken worker — future moves use sync fallback
+        worker.terminate();
+        workerRef.current = null;
+        // Sync fallback for this move
+        const col = getBestMove(currentBoard, currentDifficulty);
+        processAIMove(col);
+      };
 
-        worker.onerror = () => {
-          // Worker failed mid-flight — fall back to synchronous
-          worker?.terminate();
-          const col = getBestMove(currentBoard, currentDifficulty);
-          processAIMove(col);
-        };
+      worker.addEventListener("message", onMessage);
+      worker.addEventListener("error", onError);
+      worker.postMessage({
+        type: "move",
+        board: currentBoard,
+        difficulty: currentDifficulty,
+        moveId: currentMoveId,
+      });
 
-        worker.postMessage({ board: currentBoard, difficulty: currentDifficulty });
-
-        return () => {
-          worker?.terminate();
-        };
-      } catch {
-        // Worker construction failed (e.g. CSP or bundler issue) — fall through
-        worker?.terminate();
-      }
+      return () => {
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+      };
     }
 
     // Synchronous fallback with short delay so "thinking" indicator is visible
@@ -206,11 +238,20 @@ export function useGame(): GameState {
     setPhase("player");
     setWinResult(null);
     setHoverCol(null);
+    // Invalidate any pending AI move and clear the transposition table
+    moveIdRef.current++;
+    workerRef.current?.postMessage({ type: "clearTT" });
+    clearTranspositionTable();
   }, []);
 
   const setDifficulty = useCallback((d: Difficulty) => {
     setDifficultyState(d);
     difficultyRef.current = d;
+    // Invalidate any pending AI move and clear the TT — the evaluation
+    // function may differ between difficulties (e.g. Victor vs others)
+    moveIdRef.current++;
+    workerRef.current?.postMessage({ type: "clearTT" });
+    clearTranspositionTable();
   }, []);
 
   return {

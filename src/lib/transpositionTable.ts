@@ -57,6 +57,13 @@ export interface TTEntry {
 }
 
 /**
+ * Maximum number of entries before the table is cleared to reclaim memory.
+ * 500 000 entries ≈ 15–20 MB in a typical JS engine — well within browser
+ * limits while still providing significant cross-move cache benefit.
+ */
+export const MAX_TT_SIZE = 500_000;
+
+/**
  * Hash map from Zobrist hash → search result.
  * Stores the best score found for a position plus the bound type so that
  * alpha-beta cutoffs can be applied on a cache hit.
@@ -71,12 +78,24 @@ export class TranspositionTable {
   /**
    * Store an entry, but only overwrite an existing entry if the new search
    * was at least as deep (deeper results are more accurate).
+   *
+   * If the table exceeds MAX_TT_SIZE, it is cleared first to cap memory
+   * usage.  Iterative deepening quickly repopulates the entries needed for
+   * the current search.
    */
   set(hash: number, entry: TTEntry): void {
     const existing = this.table.get(hash);
-    if (!existing || existing.depth <= entry.depth) {
-      this.table.set(hash, entry);
+    if (existing) {
+      if (existing.depth <= entry.depth) {
+        this.table.set(hash, entry);
+      }
+      return;
     }
+    // New entry — enforce size cap
+    if (this.table.size >= MAX_TT_SIZE) {
+      this.table.clear();
+    }
+    this.table.set(hash, entry);
   }
 
   clear(): void {

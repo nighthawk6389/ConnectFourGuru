@@ -22,6 +22,14 @@ import {
   TranspositionTable,
   TTFlag,
 } from "./transpositionTable";
+
+// ---------------------------------------------------------------------------
+// Module-level transposition table — persists across getBestMove calls so
+// positions explored on move N benefit move N+1.  Cleared on new game or
+// difficulty change (evaluation function may differ).
+// ---------------------------------------------------------------------------
+
+const globalTT = new TranspositionTable();
 import { getOpeningBookMove } from "./openingBook";
 import { victorEvaluate, victorMoveOrder } from "./victorRules";
 
@@ -207,7 +215,7 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
   // 5. Iterative-deepening negamax with transposition table
   //    Search depth 1…maxDepth.  Each completed depth primes the TT so the
   //    next depth benefits from better move ordering.
-  const tt = new TranspositionTable();
+  //    The globalTT persists across moves for cross-move cache benefit.
   const startHash = computeBoardHash(board);
 
   // Victor difficulty: combine standard evaluation with threat-based analysis
@@ -237,7 +245,7 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
         Infinity,
         PLAYER,
         newHash,
-        tt,
+        globalTT,
         scoreFn
       );
       if (score > bestScore) {
@@ -286,4 +294,18 @@ function avoidGift(board: Board, bestCol: number, cols: number[]): number | null
     }
   }
   return null; // bestCol is safe
+}
+
+// ---------------------------------------------------------------------------
+// Public: clear the persistent transposition table
+// ---------------------------------------------------------------------------
+
+/**
+ * Clear the module-level transposition table.  Call this on:
+ * - New game (board resets, old entries are irrelevant)
+ * - Difficulty change (evaluation function may differ between difficulties,
+ *   so cached scores could be wrong)
+ */
+export function clearTranspositionTable(): void {
+  globalTT.clear();
 }
