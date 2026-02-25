@@ -288,8 +288,8 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
   if (bookMove !== null) return bookMove;
 
   // 4. Add random noise so the AI occasionally blunders
-  //    Easy: 40% chance · Medium: 15% chance
-  const blunderChance = difficulty === "easy" ? 0.4 : difficulty === "medium" ? 0.15 : 0;
+  //    Easy: 40% chance·
+  const blunderChance = difficulty === "easy" ? 0.4 : 0;
   if (blunderChance > 0 && Math.random() < blunderChance) {
     const valid = validCols(board);
     return valid[Math.floor(Math.random() * valid.length)];
