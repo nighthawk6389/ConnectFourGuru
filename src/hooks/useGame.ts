@@ -129,6 +129,17 @@ export function useGame(): GameState {
       }
     };
 
+    // E2E test hook — Playwright tests can set window.__TEST_AI_COL to force
+    // a specific column, bypassing the real AI and the Web Worker.
+    // This runs in the main thread so the window variable is always reachable.
+    if (typeof window !== "undefined") {
+      const e2eCol = (window as Record<string, unknown>).__TEST_AI_COL;
+      if (typeof e2eCol === "number") {
+        const id = setTimeout(() => processAIMove(e2eCol), 300);
+        return () => clearTimeout(id);
+      }
+    }
+
     // Try Web Worker path (non-blocking)
     if (typeof Worker !== "undefined") {
       let worker: Worker | null = null;

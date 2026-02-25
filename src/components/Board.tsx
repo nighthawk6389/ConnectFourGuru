@@ -36,6 +36,7 @@ export default function Board({
 
   return (
     <div
+      data-testid="board"
       className="bg-blue-600 rounded-2xl p-3 shadow-2xl select-none"
       onMouseLeave={() => onColHover(null)}
     >
@@ -47,6 +48,7 @@ export default function Board({
         {Array.from({ length: COLS }, (_, col) => (
           <div
             key={`btn-${col}`}
+            data-testid={`col-btn-${col}`}
             className={[
               "h-6 flex items-center justify-center transition-colors",
               clickable ? "cursor-pointer" : "cursor-default",
