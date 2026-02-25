@@ -1,134 +1,152 @@
-# Plan: Add "Victor" Difficulty Level
+Plan: Add "Victor" Difficulty Level
+Context
+The project's PLAN.md references Victor Allis's 1988 thesis "A Knowledge-Based Approach of Connect-Four," which solved Connect Four using nine strategic rules implemented in a program called VICTOR. The user wants these rules implemented as a new "Victor" difficulty level — the strongest tier, positioned after Guru: Easy / Medium / Hard / Guru / Victor.
+Currently the AI uses negamax with alpha-beta pruning at varying depths per difficulty. Victor will augment this with threat-based strategic analysis from Allis's rules, combined with deeper search (depth 16 vs Guru's 14).
+Allis's Rules — What We'll Implement
+Allis's thesis defines 9 strategic rules for analyzing Connect Four positions based on threats (potential four-in-a-rows called "groups"), odd/even row parity, and Zugzwang control. Key insight: the first player naturally controls odd-row squares; the second player controls even-row squares.
+Implement (6 rules — high impact, well-understood):
+#
+Rule
+What It Does
+1
+Claimeven
+Second player guarantees all even-row empty squares by responding on top. Groups with all empty squares on favorable parity are "secured."
+2
+Baseinverse
+Two directly playable squares in different columns — controller gets at least one. Neutralizes groups needing both.
+3
+Vertical
+Two stacked empty squares where upper is odd-row. Solves groups containing both squares.
+4
+Before
+A group completable before the opponent's due to gravity — the lower threat resolves first.
+5
+Aftereven
+Side-effect of Claimeven: if all empty squares in a group are Claimeven-secured, that group will eventually be completed.
+6
+Lowinverse
+Two columns with 2+ empty squares, paired at lowest empties. Controller gets at least one low square.
+Omit (3 rules — diminishing returns, high complexity):
+Highinverse — Complex variant of Lowinverse
+Baseclaim — Combination of Baseinverse + Claimeven, rarely decisive
+Specialbefore — Even the Rust reimplementation couldn't get this working
+Files to Modify
+File
+Changes
+src/lib/constants.ts
+Add "victor" to Difficulty type, add victor: 16 to DEPTH_MAP, add Victor scoring weight constants
+src/lib/ai.ts
+Add scoreFn parameter to negamax; in getBestMove, construct Victor-enhanced score function and apply victorMoveOrder at root level
+src/lib/openingBook.ts
+Allow Victor to use the opening book (change guard from !== "guru" to !== "guru" && !== "victor")
+src/components/GameControls.tsx
+Add { value: "victor", label: "Victor" } to DIFFICULTIES array
+New Files
+File
+Purpose
+src/lib/victorRules.ts
+Core module: group enumeration, parity helpers, 6 rule scorers, victorEvaluate(), victorMoveOrder()
+src/__tests__/lib/victorRules.test.ts
+Unit tests for all Victor rule functions
+Architecture: src/lib/victorRules.ts
+Key Types
+interface Square { row: number; col: number; }
 
-## Overview
+interface Group {
+  squares: [Square, Square, Square, Square];  // The 4 positions
+  owner: Cell;           // PLAYER or AI (who has pieces in it)
+  emptySquares: Square[];
+  filledCount: number;
+}
+Parity Helpers
+Row parity in our 0-indexed top-down board (board[0]=top, board[5]=bottom):
+Allis row = ROWS - boardRow (1-indexed from bottom)
+Odd squares: board rows 5, 3, 1 (Allis rows 1, 3, 5) — controlled by first player (PLAYER)
+Even squares: board rows 4, 2, 0 (Allis rows 2, 4, 6) — controlled by second player (AI)
+function isOddSquare(row: number): boolean { return (ROWS - row) % 2 === 1; }
+function isEvenSquare(row: number): boolean { return (ROWS - row) % 2 === 0; }
+Group Enumeration
+enumerateGroups(board) — Scans all 69 possible four-in-a-row lines (24 horizontal + 21 vertical + 12 diagonal-right + 12 diagonal-left). Filters to "live" groups (pieces from at most one player). Fixed cost: ~69 groups per call.
+Rule Scoring Functions
+Each rule returns a numeric score contribution:
+scoreClaimeven(board, groups, piece) — Bonus for groups with all empty squares on favorable parity
+scoreBaseinverse(board, groups, piece) — Bonus for neutralizing opponent groups via playable square pairs
+scoreVertical(board, groups, piece) — Bonus for vertical pairs with odd-row upper square
+scoreBefore(board, groups, piece) — Bonus when own groups complete before opponent's (gravity)
+scoreAftereven(board, groups, piece) — Bonus for groups entirely secured by Claimeven
+scoreLowinverse(board, groups, piece) — Bonus for paired column low squares
+Public API
+export function victorEvaluate(board: Board, piece: Cell): number
+// Composes all 6 rules into a single score. Added to scoreBoard, not replacing it.
 
-Add a fifth difficulty level — **Victor** — that implements strategic rules from Victor Allis's 1988 M.Sc. thesis *"A Knowledge-Based Approach of Connect-Four"*. Victor uses the same search depth as Guru (14-ply) but augments the standard window-based evaluation with a threat-based analysis derived from Allis's nine strategic rules, plus threat-aware move ordering at the root for better alpha-beta pruning.
+export function victorMoveOrder(board: Board, piece: Cell, cols: number[]): number[]
+// Reorders candidate columns by threat value for better alpha-beta pruning.
+Integration into src/lib/ai.ts
+1. negamax — Add scoreFn parameter
+type ScoreFn = (board: Board, piece: Cell) => number;
 
----
-
-## Background
-
-Connect Four was solved by Victor Allis in 1988. His program VICTOR used nine strategic rules to reason about threats and counter-threats without exhaustive search. These rules exploit **parity** (odd/even row control) and **gravity** (pieces must stack) to prove that certain groups (potential four-in-a-rows) are guaranteed to complete or guaranteed to be blocked.
-
-Key insight: the first player controls **odd** squares (Allis row numbering, 1-indexed from bottom), the second player controls **even** squares. By responding in the same column, the even-row player can always "claim" the even square.
-
----
-
-## Implementation Steps
-
-### Step 1: Add Constants
-
-**File: `src/lib/constants.ts`**
-
-- Add `"victor"` to the `Difficulty` union type
-- Add `victor: 14` to `DEPTH_MAP` (same depth as Guru — strength comes from better evaluation, not deeper search)
-- Add evaluation weight constants for each rule:
-  - `VICTOR_CLAIMEVEN_3/2/1` — bonuses for secured groups via parity
-  - `VICTOR_BEFORE_3/2` — bonuses for groups completable before opponent's
-  - `VICTOR_VERTICAL_3/2` — bonuses for vertical pair control
-  - `VICTOR_AFTEREVEN_3/2` — bonuses for groups guaranteed via Claimeven chains
-  - `VICTOR_BASEINVERSE` — bonus for playable-square pair control
-  - `VICTOR_LOWINVERSE` — bonus for low-square pair control
-
-### Step 2: Implement Victor Rules Module
-
-**File: `src/lib/victorRules.ts`** (new file)
-
-Implement 6 of Allis's 9 strategic rules:
-
-1. **Claimeven** — Second player (AI) controls even-row squares by always responding in the same column. If all empty squares in a group are on the favorable parity for the group's owner, the group is "secured." Score bonus/penalty based on filled count (3, 2, or 1).
-
-2. **Baseinverse** — Two directly playable squares in different columns. The controller guarantees getting at least one. Scores a bonus when opponent groups require both playable squares (neutralized).
-
-3. **Vertical** — Two consecutive empty squares in the same column where the upper square is on an odd row. The first player benefits because the opponent must fill the lower square first, granting the first player the odd (upper) square.
-
-4. **Before** — A group G is completable "before" an opponent group H if G's lowest empty square is playable at or below H's empty squares. Due to gravity, G resolves first. Scores based on both groups' fill counts.
-
-5. **Aftereven** — If all empty squares in a group can be claimed via Claimeven (all on the owner's favorable parity) and each has a square below it, the group will eventually complete. Stronger bonus than plain Claimeven because completion is guaranteed.
-
-6. **Lowinverse** — Two columns each with 2+ empty squares where the lowest empty squares form a pair. The controller guarantees at least one of the two low squares, neutralizing opponent groups that need both.
-
-**Exports:**
-
-- `victorEvaluate(board, piece)` — returns combined score from all 6 rules (added to standard `scoreBoard`, not replacing it)
-- `victorMoveOrder(board, piece, cols)` — reorders columns by threat-based priority (center preference + parity preference + group advancement/blocking) for better alpha-beta pruning at the root
-
-**Helper exports (for testing):**
-
-- `isOddSquare(row)` / `isEvenSquare(row)` — Allis parity checks
-- `enumerateGroups(board)` — finds all live groups (potential four-in-a-rows with pieces from at most one player)
-
-### Step 3: Integrate into AI Engine
-
-**File: `src/lib/ai.ts`**
-
-- Import `victorEvaluate` and `victorMoveOrder` from `./victorRules`
-- In `getBestMove`, when `difficulty === "victor"`:
-  - Use a combined score function: `scoreBoard(b, p) + victorEvaluate(b, p)`
-  - Use `victorMoveOrder(board, AI, cols)` for root-level column ordering instead of the default center-out `MOVE_ORDER`
-- Opening book (`getOpeningBookMove`) already supports `"guru" | "victor"` — no changes needed
-- Gift-avoidance (`avoidGift`) already applies at medium+ — no changes needed
-
-### Step 4: Update UI Components
-
-**File: `src/components/GameControls.tsx`**
-
-- Add a "Victor" difficulty button alongside Easy/Medium/Hard/Guru
-- Style it distinctly (e.g., amber/gold theme) to signal it's the ultimate difficulty
-
-**File: `src/hooks/useGame.ts`**
-
-- No structural changes needed — `Difficulty` type already includes `"victor"`, and `DEPTH_MAP` already maps it
-
-### Step 5: Add Tests
-
-**File: `src/__tests__/lib/victorRules.test.ts`** (new file)
-
-- Test `isOddSquare` / `isEvenSquare` parity helpers
-- Test `enumerateGroups` — verify correct group enumeration, dead group filtering
-- Test `scoreClaimeven` — groups with all empties on favorable parity get bonuses
-- Test `scoreBaseinverse` — playable square pairs neutralize opponent groups
-- Test `scoreVertical` — consecutive empty pairs with odd upper square
-- Test `scoreBefore` — groups with lower playable empties score higher
-- Test `scoreAftereven` — fully claimable groups get guaranteed-completion bonus
-- Test `scoreLowinverse` — low-square pairs in different columns
-- Test `victorEvaluate` — integration test returning nonzero on non-trivial boards
-- Test `victorMoveOrder` — columns reordered by threat priority
-
-**Existing test updates:**
-
-- `src/__tests__/lib/ai.test.ts` — add Victor difficulty cases (win detection, block detection)
-- `src/__tests__/components/GameControls.test.tsx` — verify Victor button renders and fires callback
-- `src/__tests__/hooks/useGame.test.ts` — verify Victor difficulty is selectable
-
-### Step 6: Update Documentation
-
-- Update `CLAUDE.md` depth map table to include Victor
-- Update `PLAN.md` difficulty table to include Victor
-
----
-
-## Architecture Decisions
-
-| Decision | Choice | Rationale |
-|---|---|---|
-| Same depth as Guru (14) | Depth 14 | Strength comes from the enhanced evaluation, not deeper search. Keeps response time comparable to Guru. |
-| Additive evaluation | `scoreBoard + victorEvaluate` | Victor rules complement (not replace) the window-based heuristic. The standard eval handles tactical patterns; Victor rules handle strategic/positional patterns. |
-| 6 of 9 rules | Claimeven, Baseinverse, Vertical, Before, Aftereven, Lowinverse | These 6 cover the core parity and gravity reasoning. The remaining 3 (Specialbefore, Oddthreat, ThreatCombination) are more complex to implement and yield diminishing returns in a search-based AI. |
-| Threat-based move ordering | `victorMoveOrder` at root only | Full threat analysis at every node would be too expensive. At the root, it improves pruning by trying the most promising moves first. Interior nodes still use the fast center-out ordering. |
-| Separate module | `victorRules.ts` | Keeps the core `ai.ts` clean. Victor rules are conceptually distinct from the standard negamax infrastructure. |
-
----
-
-## Files Modified/Created
-
-| File | Action |
-|---|---|
-| `src/lib/constants.ts` | Modified — add Victor type, depth, weights |
-| `src/lib/victorRules.ts` | **Created** — 6 strategic rules + evaluation + move ordering |
-| `src/lib/ai.ts` | Modified — integrate Victor evaluation and move ordering |
-| `src/components/GameControls.tsx` | Modified — add Victor button |
-| `src/__tests__/lib/victorRules.test.ts` | **Created** — full test coverage for rules module |
-| `src/__tests__/lib/ai.test.ts` | Modified — add Victor test cases |
-| `src/__tests__/components/GameControls.test.tsx` | Modified — add Victor button test |
-| `src/__tests__/hooks/useGame.test.ts` | Modified — add Victor difficulty test |
+function negamax(board, depth, alpha, beta, piece, hash, tt, scoreFn: ScoreFn): number {
+  // ... at leaf node evaluation:
+  return scoreFn(board, piece);  // Instead of hardcoded scoreBoard(board, piece)
+}
+All existing difficulties pass scoreBoard directly. Victor passes a combined function:
+const scoreFn = difficulty === "victor"
+  ? (b: Board, p: Cell) => scoreBoard(b, p) + victorEvaluate(b, p)
+  : scoreBoard;
+2. getBestMove — Victor-specific enhancements
+Root-level move ordering: For Victor, use victorMoveOrder instead of static MOVE_ORDER to pick the best column first
+Opening book: Victor uses the same opening book as Guru
+Gift avoidance: Victor uses gift avoidance (same as medium+)
+No random blunders: Victor never blunders (same as medium+)
+3. Why scoreFn approach?
+Clean: no boolean threading through negamax
+Backward compatible: all other difficulties unchanged (pass scoreBoard)
+Extensible: future difficulties could define their own scoring
+Type-safe: TypeScript enforces the function signature
+UI Changes: src/components/GameControls.tsx
+Add Victor to the DIFFICULTIES array:
+const DIFFICULTIES: { value: Difficulty; label: string }[] = [
+  { value: "easy", label: "Easy" },
+  { value: "medium", label: "Medium" },
+  { value: "hard", label: "Hard" },
+  { value: "guru", label: "Guru" },
+  { value: "victor", label: "Victor" },
+];
+No other UI changes needed. The existing button rendering and difficulty state management in useGame.ts and ai.worker.ts handle the new value automatically since they're typed on Difficulty.
+Test Strategy
+New: src/__tests__/lib/victorRules.test.ts
+Using boardFrom() helper (same pattern as ai.test.ts):
+Group enumeration: Empty board = 69 groups; board with mixed pieces = dead groups filtered
+Parity helpers: Verify isOddSquare/isEvenSquare for all 6 rows
+Claimeven: Board with AI group on all-even empty squares scores positive
+Baseinverse: Two playable squares neutralize opponent group
+Vertical: Stacked empty squares with odd upper square identified
+Before: AI group completable before player's group scores positive
+victorEvaluate: Integration test — known positions score as expected
+victorMoveOrder: Threat-creating columns ordered first; center fallback preserved
+Updates to existing tests
+ai.test.ts: Add describe("getBestMove — Victor difficulty") — valid column output, win/block detection, determinism (use constrained boards for speed)
+openingBook.test.ts: Add tests for getOpeningBookMove(board, "victor") returning center column
+GameControls.test.tsx: Update "renders all four difficulty buttons" → five buttons, add Victor assertions
+useGame.test.ts: Test setDifficulty("victor") updates state
+Implementation Sequence
+Constants — Update Difficulty type, DEPTH_MAP, add scoring weight constants in constants.ts
+Victor rules module — Create victorRules.ts with types, helpers, group enumeration, 6 rule scorers, victorEvaluate, victorMoveOrder
+AI integration — Add scoreFn to negamax, update getBestMove for Victor
+Opening book — Update guard in openingBook.ts
+UI — Add Victor button in GameControls.tsx
+Tests — Create victorRules.test.ts, update ai.test.ts, openingBook.test.ts, GameControls.test.tsx, useGame.test.ts
+Verification
+npm test            # All tests pass (existing + new Victor tests)
+npm run lint        # No ESLint errors
+npm run build       # TypeScript strict mode + production build passes
+Manual verification: Play against Victor difficulty and confirm:
+Moves are computed in < 3 seconds (Web Worker keeps UI responsive)
+Victor uses opening book for early moves
+Victor plays noticeably stronger than Guru
+All 5 difficulty buttons render and switch correctly
+Performance Notes
+Group enumeration: Fixed 69 groups, ~400-500 ops per victorEvaluate call (comparable to scoreBoard)
+victorMoveOrder: Applied at root only (not recursive), costs ~7 * victorEvaluate = ~3500 ops
+Depth 16 vs 14: ~2x more nodes, offset by better evaluation producing tighter pruning bounds
+Fallback: If depth 16 proves too slow, reduce to 15 (one constant change)
