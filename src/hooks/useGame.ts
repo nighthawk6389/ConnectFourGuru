@@ -23,9 +23,11 @@ export interface GameState {
   winResult: WinResult;
   score: Score;
   difficulty: Difficulty;
+  playerGoesFirst: boolean;
   hoverCol: number | null;
   newGame: () => void;
   setDifficulty: (d: Difficulty) => void;
+  setPlayerGoesFirst: (first: boolean) => void;
   handleColClick: (col: number) => void;
   handleColHover: (col: number | null) => void;
 }
@@ -81,6 +83,7 @@ export function useGame(): GameState {
   // Initialise score from localStorage so it persists across page refreshes
   const [score, setScore] = useState<Score>(loadScore);
   const [difficulty, setDifficultyState] = useState<Difficulty>("medium");
+  const [playerGoesFirst, setPlayerGoesFirstState] = useState(true);
   const [hoverCol, setHoverCol] = useState<number | null>(null);
 
   // Keep a ref to difficulty so the AI timeout/worker closure always sees current value
@@ -235,9 +238,14 @@ export function useGame(): GameState {
     setHoverCol(col);
   }, []);
 
+  const playerGoesFirstRef = useRef(playerGoesFirst);
+  useEffect(() => {
+    playerGoesFirstRef.current = playerGoesFirst;
+  });
+
   const newGame = useCallback(() => {
     setBoard(emptyBoard());
-    setPhase("player");
+    setPhase(playerGoesFirstRef.current ? "player" : "thinking");
     setWinResult(null);
     setHoverCol(null);
     // Invalidate any pending AI move and clear the transposition table
@@ -256,15 +264,27 @@ export function useGame(): GameState {
     clearTranspositionTable();
   }, []);
 
+  const setPlayerGoesFirst = useCallback(
+    (first: boolean) => {
+      setPlayerGoesFirstState(first);
+      playerGoesFirstRef.current = first;
+      // Auto-start a new game so the toggle takes effect immediately
+      newGame();
+    },
+    [newGame]
+  );
+
   return {
     board,
     phase,
     winResult,
     score,
     difficulty,
+    playerGoesFirst,
     hoverCol,
     newGame,
     setDifficulty,
+    setPlayerGoesFirst,
     handleColClick,
     handleColHover,
   };
