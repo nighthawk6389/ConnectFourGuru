@@ -4,7 +4,7 @@ import GameControls from "@/components/GameControls";
 const noop = () => {};
 
 describe("GameControls", () => {
-  it("renders all four difficulty buttons", () => {
+  it("renders all five difficulty buttons", () => {
     const { getByText } = render(
       <GameControls
         difficulty="medium"
@@ -17,6 +17,7 @@ describe("GameControls", () => {
     expect(getByText("Medium")).toBeInTheDocument();
     expect(getByText("Hard")).toBeInTheDocument();
     expect(getByText("Guru")).toBeInTheDocument();
+    expect(getByText("Victor")).toBeInTheDocument();
   });
 
   it("renders the New Game button", () => {
@@ -57,6 +58,20 @@ describe("GameControls", () => {
     );
     fireEvent.click(getByText("Hard"));
     expect(handleChange).toHaveBeenCalledWith("hard");
+  });
+
+  it("calls onDifficultyChange with 'victor' when Victor is clicked", () => {
+    const handleChange = jest.fn();
+    const { getByText } = render(
+      <GameControls
+        difficulty="medium"
+        onDifficultyChange={handleChange}
+        onNewGame={noop}
+        thinking={false}
+      />
+    );
+    fireEvent.click(getByText("Victor"));
+    expect(handleChange).toHaveBeenCalledWith("victor");
   });
 
   it("shows thinking indicator when thinking=true", () => {

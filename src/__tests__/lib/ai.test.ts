@@ -275,3 +275,71 @@ describe("getBestMove — iterative deepening correctness", () => {
     expect(col1).toBe(col2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Victor difficulty
+// ---------------------------------------------------------------------------
+
+describe("getBestMove — Victor difficulty", () => {
+  it("returns a valid column on a near-terminal board (one column left)", () => {
+    // Fill all columns except col 3
+    let board = emptyBoard();
+    for (let c = 0; c < COLS; c++) {
+      if (c === 3) continue;
+      for (let r = 1; r < ROWS; r++) {
+        board = dropPiece(board, c, r % 2 === 0 ? PLAYER : AI);
+      }
+    }
+    if (board[0][3] === EMPTY) {
+      const col = getBestMove(board, "victor");
+      expect(col).toBe(3);
+    }
+  });
+
+  it("finds a winning move", () => {
+    const board = boardFrom([
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "P......",
+      ".AAA...",
+    ]);
+    const col = getBestMove(board, "victor");
+    const next = dropPiece(board, col, AI);
+    expect(checkWin(next)?.winner).toBe(AI);
+  });
+
+  it("blocks an opponent horizontal win", () => {
+    const board = boardFrom([
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "A......",
+      "PPP....",
+    ]);
+    const col = getBestMove(board, "victor");
+    expect(col).toBe(3);
+  });
+
+  it("returns the same column on repeated calls (deterministic)", () => {
+    const board = boardFrom([
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "A......",
+      "PPP....",
+    ]);
+    const first = getBestMove(board, "victor");
+    const second = getBestMove(board, "victor");
+    expect(first).toBe(second);
+  });
+
+  it("uses opening book on first AI move", () => {
+    const board = dropPiece(emptyBoard(), 0, PLAYER);
+    const col = getBestMove(board, "victor");
+    expect(col).toBe(3); // center column from opening book
+  });
+});

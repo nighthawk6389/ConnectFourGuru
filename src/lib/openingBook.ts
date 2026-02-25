@@ -97,11 +97,11 @@ const BOOK_MAP: Map<string, number> = (() => {
  * Look up the current position in the opening book.
  *
  * @param board     The current board state.
- * @param difficulty  Only Guru uses the opening book.
+ * @param difficulty  Only Guru and Victor use the opening book.
  * @returns The best column index, or `null` if the position is not in the book.
  */
 export function getOpeningBookMove(board: Board, difficulty: Difficulty): number | null {
-  if (difficulty !== "guru") return null;
+  if (difficulty !== "guru" && difficulty !== "victor") return null;
 
   // Count pieces to decide whether we're still in the opening
   let totalPieces = 0;
