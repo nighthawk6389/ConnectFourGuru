@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import React from "react";
 import Cell from "@/components/Cell";
 import { EMPTY, PLAYER, AI } from "@/lib/constants";
 
@@ -86,5 +87,60 @@ describe("Cell", () => {
     );
     const disc = container.querySelector(".piece-drop") as HTMLElement | null;
     expect(disc?.style.getPropertyValue("--drop-rows")).toBe("4");
+  });
+
+  // ---------------------------------------------------------------------------
+  // win-pulse animation (new feature)
+  // ---------------------------------------------------------------------------
+
+  it("applies win-pulse class to a winning cell", () => {
+    const { container } = render(
+      <Cell value={PLAYER} isWinCell={true} isHovered={false} row={0} />
+    );
+    const disc = container.querySelector(".win-pulse");
+    expect(disc).toBeInTheDocument();
+  });
+
+  it("does NOT apply win-pulse class to a non-winning filled cell", () => {
+    const { container } = render(
+      <Cell value={PLAYER} isWinCell={false} isHovered={false} row={0} />
+    );
+    const disc = container.querySelector(".win-pulse");
+    expect(disc).not.toBeInTheDocument();
+  });
+
+  it("does NOT apply win-pulse class to an empty cell", () => {
+    const { container } = render(
+      <Cell value={EMPTY} isWinCell={false} isHovered={false} row={0} />
+    );
+    const disc = container.querySelector(".win-pulse");
+    expect(disc).not.toBeInTheDocument();
+  });
+
+  it("applies win-pulse class to a winning AI cell", () => {
+    const { container } = render(
+      <Cell value={AI} isWinCell={true} isHovered={false} row={0} />
+    );
+    const disc = container.querySelector(".win-pulse");
+    expect(disc).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // React.memo — verify the component is memoised
+  // ---------------------------------------------------------------------------
+
+  it("is wrapped with React.memo", () => {
+    // React.memo wraps the component in an object whose $$typeof is Symbol(react.memo)
+    // We check that re-rendering with identical props does not unmount/remount.
+    const renderSpy = jest.fn();
+
+    // Render twice with same props — a non-memoised component would re-render
+    // both times, but with React.memo the second render is skipped.
+    // We test this indirectly: the component type should be a memo object.
+    const CellModule = require("@/components/Cell");
+    const CellDefault = CellModule.default;
+
+    // React.memo components have a $$typeof of Symbol(react.memo)
+    expect(CellDefault.$$typeof?.toString()).toContain("react.memo");
   });
 });

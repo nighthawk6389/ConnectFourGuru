@@ -3,6 +3,12 @@ import WinnerModal from "@/components/WinnerModal";
 import { PLAYER, AI } from "@/lib/constants";
 import { WinResult } from "@/lib/game";
 
+// Mock canvas-confetti so it doesn't throw in jsdom.
+// jest.mock is hoisted before variable declarations, so we must define the
+// mock function inside the factory and retrieve it with jest.requireMock().
+jest.mock("canvas-confetti", () => jest.fn());
+const mockConfetti = jest.requireMock("canvas-confetti") as jest.Mock;
+
 const noop = () => {};
 
 const playerWin: WinResult = {
@@ -24,6 +30,10 @@ const aiWin: WinResult = {
     [2, 3],
   ],
 };
+
+beforeEach(() => {
+  mockConfetti.mockClear();
+});
 
 describe("WinnerModal", () => {
   it("renders nothing when there is no winner and no draw", () => {
@@ -90,5 +100,42 @@ describe("WinnerModal", () => {
     );
     expect(getByText("It's a Draw!")).toBeInTheDocument();
     expect(getByText("Nobody wins this time.")).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Confetti (new feature)
+  // ---------------------------------------------------------------------------
+
+  it("fires confetti when the player wins", () => {
+    render(
+      <WinnerModal winResult={playerWin} isDraw={false} onNewGame={noop} />
+    );
+    expect(mockConfetti).toHaveBeenCalledTimes(1);
+    const [opts] = mockConfetti.mock.calls[0];
+    expect(opts).toMatchObject({
+      particleCount: expect.any(Number),
+      spread: expect.any(Number),
+    });
+  });
+
+  it("does NOT fire confetti when the AI wins", () => {
+    render(
+      <WinnerModal winResult={aiWin} isDraw={false} onNewGame={noop} />
+    );
+    expect(mockConfetti).not.toHaveBeenCalled();
+  });
+
+  it("does NOT fire confetti on a draw", () => {
+    render(
+      <WinnerModal winResult={null} isDraw={true} onNewGame={noop} />
+    );
+    expect(mockConfetti).not.toHaveBeenCalled();
+  });
+
+  it("does NOT fire confetti when no game result is shown", () => {
+    render(
+      <WinnerModal winResult={null} isDraw={false} onNewGame={noop} />
+    );
+    expect(mockConfetti).not.toHaveBeenCalled();
   });
 });
