@@ -13,6 +13,10 @@ const config: Config = {
     "<rootDir>/src/__tests__/**/*.test.ts",
     "<rootDir>/src/__tests__/**/*.test.tsx",
   ],
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "<rootDir>/src/__tests__/simulation/",
+  ],
   collectCoverageFrom: [
     "src/lib/**/*.ts",
     "src/hooks/**/*.ts",

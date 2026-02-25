@@ -10,6 +10,7 @@
     "test": "jest --forceExit",
     "test:watch": "jest --watch --forceExit",
     "test:coverage": "jest --coverage --forceExit",
+    "test:simulation": "node_modules/.bin/jest --config jest.simulation.config.ts --forceExit --verbose",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed"
