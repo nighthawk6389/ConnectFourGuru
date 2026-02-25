@@ -199,7 +199,9 @@ describe("useGame — newGame", () => {
 
   it("resets phase to 'thinking' when playerGoesFirst is false", () => {
     const { result } = renderHook(() => useGame());
+    // setPlayerGoesFirst auto-starts a game; drain the AI timer before calling newGame
     act(() => result.current.setPlayerGoesFirst(false));
+    act(() => jest.runOnlyPendingTimers());
     act(() => result.current.newGame());
     expect(result.current.phase).toBe("thinking");
   });
@@ -365,10 +367,14 @@ describe("useGame — setPlayerGoesFirst", () => {
     expect(result.current.playerGoesFirst).toBe(false);
   });
 
-  it("CPU moves first when newGame is called with playerGoesFirst=false", () => {
+  it("auto-starts a new game when toggled to CPU-first", () => {
     const { result } = renderHook(() => useGame());
+    // Make a move so the board is non-empty
+    act(() => result.current.handleColClick(0));
+    act(() => jest.runOnlyPendingTimers());
+
+    // Toggle to CPU-first — should auto-start a new game in "thinking" phase
     act(() => result.current.setPlayerGoesFirst(false));
-    act(() => result.current.newGame());
     expect(result.current.phase).toBe("thinking");
 
     // Let the AI move
@@ -379,11 +385,16 @@ describe("useGame — setPlayerGoesFirst", () => {
     expect(result.current.phase).toBe("player");
   });
 
-  it("player moves first when toggled back to true", () => {
+  it("auto-starts a new game when toggled back to player-first", () => {
     const { result } = renderHook(() => useGame());
     act(() => result.current.setPlayerGoesFirst(false));
+    act(() => jest.runOnlyPendingTimers()); // let AI move
+
     act(() => result.current.setPlayerGoesFirst(true));
-    act(() => result.current.newGame());
+    // Should immediately be player's turn with an empty board
     expect(result.current.phase).toBe("player");
+    result.current.board.forEach((row) =>
+      row.forEach((cell) => expect(cell).toBe(EMPTY))
+    );
   });
 });

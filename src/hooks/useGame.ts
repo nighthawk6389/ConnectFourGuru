@@ -264,10 +264,15 @@ export function useGame(): GameState {
     clearTranspositionTable();
   }, []);
 
-  const setPlayerGoesFirst = useCallback((first: boolean) => {
-    setPlayerGoesFirstState(first);
-    playerGoesFirstRef.current = first;
-  }, []);
+  const setPlayerGoesFirst = useCallback(
+    (first: boolean) => {
+      setPlayerGoesFirstState(first);
+      playerGoesFirstRef.current = first;
+      // Auto-start a new game so the toggle takes effect immediately
+      newGame();
+    },
+    [newGame]
+  );
 
   return {
     board,

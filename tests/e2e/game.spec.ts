@@ -336,13 +336,12 @@ test.describe("First-move toggle", () => {
     await expect(youFirst).not.toHaveClass(/bg-red-500/);
   });
 
-  test("CPU moves first after selecting 'CPU First' and clicking 'New Game'", async ({ page }) => {
+  test("CPU moves first immediately after clicking 'CPU First'", async ({ page }) => {
     await page.goto("/");
     await mockAIColumn(page, 3);
 
-    // Switch to CPU-first mode
+    // Clicking 'CPU First' auto-starts a new game — no separate New Game click needed
     await page.getByRole("button", { name: "CPU First" }).click();
-    await page.getByRole("button", { name: "New Game" }).click();
 
     // The CPU should be thinking — wait for the AI to finish and player turn to begin
     await expect(
@@ -363,9 +362,8 @@ test.describe("First-move toggle", () => {
     // move, then switch to col 6 for the rest (only 3 pieces in col 6).
     await mockAIColumn(page, 5);
 
-    // Switch to CPU-first mode
+    // Clicking 'CPU First' auto-starts a new game with the CPU moving first
     await page.getByRole("button", { name: "CPU First" }).click();
-    await page.getByRole("button", { name: "New Game" }).click();
 
     // Wait for AI to make its opening move (col 5), then player turn begins
     await expect(
@@ -384,16 +382,15 @@ test.describe("First-move toggle", () => {
     await expect(page.getByText("You Win!")).toBeVisible({ timeout: 5_000 });
   });
 
-  test("toggling back to 'You First' restores normal play order", async ({ page }) => {
+  test("toggling back to 'You First' auto-starts with player turn", async ({ page }) => {
     await page.goto("/");
     await mockAIColumn(page, 6);
 
-    // Switch to CPU first, then back to player first
+    // Switch to CPU first (auto-starts game), then back to player first (auto-starts again)
     await page.getByRole("button", { name: "CPU First" }).click();
     await page.getByRole("button", { name: "You First" }).click();
-    await page.getByRole("button", { name: "New Game" }).click();
 
-    // Should start with player turn immediately
+    // Should start with player turn immediately — no New Game click needed
     await expect(page.getByText("Your turn — click a column")).toBeVisible();
 
     // Verify player can click and game proceeds normally
