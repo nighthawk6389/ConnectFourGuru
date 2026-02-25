@@ -18,11 +18,25 @@ export const SCORE_TWO = 2;
 export const SCORE_OPP_THREE = -4;
 export const SCORE_CENTER = 3;
 
-export type Difficulty = "easy" | "medium" | "hard" | "guru";
+export type Difficulty = "easy" | "medium" | "hard" | "guru" | "victor";
 
 export const DEPTH_MAP: Record<Difficulty, number> = {
   easy: 3,
   medium: 6,
   hard: 10,
   guru: 14,
+  victor: 14,
 };
+
+// Victor-rules evaluation weights (Allis's strategic rules)
+export const VICTOR_CLAIMEVEN_3 = 40;
+export const VICTOR_CLAIMEVEN_2 = 10;
+export const VICTOR_CLAIMEVEN_1 = 3;
+export const VICTOR_BEFORE_3 = 60;
+export const VICTOR_BEFORE_2 = 20;
+export const VICTOR_VERTICAL_3 = 20;
+export const VICTOR_VERTICAL_2 = 8;
+export const VICTOR_AFTEREVEN_3 = 25;
+export const VICTOR_AFTEREVEN_2 = 8;
+export const VICTOR_BASEINVERSE = 15;
+export const VICTOR_LOWINVERSE = 12;

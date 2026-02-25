@@ -14,6 +14,7 @@ const DIFFICULTIES: { value: Difficulty; label: string }[] = [
   { value: "medium", label: "Medium" },
   { value: "hard", label: "Hard" },
   { value: "guru", label: "Guru" },
+  { value: "victor", label: "Victor" },
 ];
 
 export default function GameControls({

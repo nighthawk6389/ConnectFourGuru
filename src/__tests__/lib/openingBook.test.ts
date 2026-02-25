@@ -93,6 +93,35 @@ describe("getOpeningBookMove — Guru, early game", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Victor difficulty — same opening book as Guru
+// ---------------------------------------------------------------------------
+
+describe("getOpeningBookMove — Victor, early game", () => {
+  it("returns center column (3) when center is free and 1 player piece exists", () => {
+    for (let playerCol = 0; playerCol < COLS; playerCol++) {
+      if (playerCol === 3) continue;
+      const board = dropPiece(emptyBoard(), playerCol, PLAYER);
+      const col = getOpeningBookMove(board, "victor");
+      expect(col).toBe(3);
+    }
+  });
+
+  it("returns a valid column for a board with 3 pieces (Victor second move)", () => {
+    const board = boardFromMoves([1, 3, 0]);
+    const col = getOpeningBookMove(board, "victor");
+    expect(col).not.toBeNull();
+    if (col !== null) {
+      expect(board[0][col]).toBe(0);
+    }
+  });
+
+  it("returns null when more than 6 pieces are on the board", () => {
+    const board = boardFromMoves([0, 1, 2, 3, 4, 5, 6]);
+    expect(getOpeningBookMove(board, "victor")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Guru difficulty — beyond opening
 // ---------------------------------------------------------------------------
 

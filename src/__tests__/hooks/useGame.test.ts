@@ -215,6 +215,12 @@ describe("useGame — setDifficulty", () => {
     act(() => result.current.setDifficulty("hard"));
     expect(result.current.difficulty).toBe("hard");
   });
+
+  it("updates difficulty to victor", () => {
+    const { result } = renderHook(() => useGame());
+    act(() => result.current.setDifficulty("victor"));
+    expect(result.current.difficulty).toBe("victor");
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@ import {
   TTFlag,
 } from "./transpositionTable";
 import { getOpeningBookMove } from "./openingBook";
+import { victorEvaluate, victorMoveOrder } from "./victorRules";
 
 // ---------------------------------------------------------------------------
 // Evaluation helpers
@@ -101,6 +102,8 @@ function scoreBoard(board: Board, piece: Cell): number {
 // Negamax with alpha-beta pruning + transposition table
 // ---------------------------------------------------------------------------
 
+type ScoreFn = (board: Board, piece: Cell) => number;
+
 function isTerminal(board: Board): boolean {
   return checkWin(board) !== null || validCols(board).length === 0;
 }
@@ -112,7 +115,8 @@ function negamax(
   beta: number,
   piece: Cell,
   hash: number,
-  tt: TranspositionTable
+  tt: TranspositionTable,
+  scoreFn: ScoreFn
 ): number {
   const origAlpha = alpha;
 
@@ -134,7 +138,7 @@ function negamax(
         : -(SCORE_WIN * 100 + depth);
     }
     if (validCols(board).length === 0) return 0; // draw
-    return scoreBoard(board, piece);
+    return scoreFn(board, piece);
   }
 
   const cols = MOVE_ORDER.filter((c) => board[0][c] === EMPTY);
@@ -146,7 +150,16 @@ function negamax(
     const next = dropPiece(board, col, piece);
     // Incrementally update the Zobrist hash for this move
     const newHash = hash ^ ZOBRIST[row][col][piece - 1];
-    const val = -negamax(next, depth - 1, -beta, -alpha, opp, newHash, tt);
+    const val = -negamax(
+      next,
+      depth - 1,
+      -beta,
+      -alpha,
+      opp,
+      newHash,
+      tt,
+      scoreFn
+    );
     if (val > best) best = val;
     if (best > alpha) alpha = best;
     if (alpha >= beta) break; // prune
@@ -169,21 +182,21 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
   const maxDepth = DEPTH_MAP[difficulty];
   const cols = MOVE_ORDER.filter((c) => board[0][c] === EMPTY);
 
-  // 1. Opening book (Guru only — instant, no search needed for early game)
-  const bookMove = getOpeningBookMove(board, difficulty);
-  if (bookMove !== null) return bookMove;
-
-  // 2. Play winning move immediately (all difficulties)
+  // 1. Play winning move immediately (all difficulties)
   for (const col of cols) {
     const next = dropPiece(board, col, AI);
     if (checkWin(next)?.winner === AI) return col;
   }
 
-  // 3. Block opponent's immediate win (all difficulties)
+  // 2. Block opponent's immediate win (all difficulties)
   for (const col of cols) {
     const next = dropPiece(board, col, PLAYER);
     if (checkWin(next)?.winner === PLAYER) return col;
   }
+
+  // 3. Opening book (Guru + Victor — instant, no search needed for early game)
+  const bookMove = getOpeningBookMove(board, difficulty);
+  if (bookMove !== null) return bookMove;
 
   // 4. For easy mode, add random noise so the AI occasionally blunders
   if (difficulty === "easy" && Math.random() < 0.4) {
@@ -197,13 +210,23 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
   const tt = new TranspositionTable();
   const startHash = computeBoardHash(board);
 
-  let bestCol = cols[0];
+  // Victor difficulty: combine standard evaluation with threat-based analysis
+  const scoreFn: ScoreFn =
+    difficulty === "victor"
+      ? (b, p) => scoreBoard(b, p) + victorEvaluate(b, p)
+      : scoreBoard;
+
+  // Victor difficulty: use threat-based move ordering at root for better pruning
+  const rootCols =
+    difficulty === "victor" ? victorMoveOrder(board, AI, cols) : cols;
+
+  let bestCol = rootCols[0];
 
   for (let depth = 1; depth <= maxDepth; depth++) {
     let bestScore = -Infinity;
-    let currentBestCol = cols[0];
+    let currentBestCol = rootCols[0];
 
-    for (const col of cols) {
+    for (const col of rootCols) {
       const row = getDropRow(board, col);
       const next = dropPiece(board, col, AI);
       const newHash = startHash ^ ZOBRIST[row][col][AI - 1];
@@ -214,7 +237,8 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
         Infinity,
         PLAYER,
         newHash,
-        tt
+        tt,
+        scoreFn
       );
       if (score > bestScore) {
         bestScore = score;
@@ -228,7 +252,7 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
   // 6. Avoid creating a position where the opponent wins on the next drop
   //    (gift-avoidance). Only apply at medium+ difficulty.
   if (difficulty !== "easy") {
-    const safeCol = avoidGift(board, bestCol, cols);
+    const safeCol = avoidGift(board, bestCol, rootCols);
     if (safeCol !== null) return safeCol;
   }
 
