@@ -5,9 +5,15 @@
  * positions to keep the suite fast. Easy/medium are tested on open boards.
  */
 
-import { getBestMove } from "@/lib/ai";
+import { getBestMove, clearTranspositionTable } from "@/lib/ai";
 import { emptyBoard, dropPiece, checkWin } from "@/lib/game";
 import { PLAYER, AI, COLS, ROWS, EMPTY, Board, Cell } from "@/lib/constants";
+
+// Clear the persistent transposition table between tests so cached entries
+// from one test don't leak into another.
+beforeEach(() => {
+  clearTranspositionTable();
+});
 
 function boardFrom(rows: string[]): Board {
   return rows.map((row) =>
@@ -261,7 +267,7 @@ describe("getBestMove — iterative deepening correctness", () => {
     expect(col).toBe(3);
   });
 
-  it("returns the same best column on two calls (TT cleared between calls)", () => {
+  it("returns the same best column on two calls (persistent TT)", () => {
     const board = boardFrom([
       ".......",
       ".......",
