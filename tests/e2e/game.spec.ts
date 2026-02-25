@@ -32,13 +32,6 @@ async function mockAIColumn(page: Page, col: number): Promise<void> {
   }, col);
 }
 
-/** Remove the AI override so subsequent interactions use the real AI. */
-async function clearAIMock(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    delete (window as Record<string, unknown>).__TEST_AI_COL;
-  });
-}
-
 /**
  * Click a board column and then wait until it is the player's turn again
  * (i.e. the AI has responded and the "Your turn" hint text reappears).

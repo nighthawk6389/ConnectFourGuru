@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import React from "react";
 import Cell from "@/components/Cell";
 import { EMPTY, PLAYER, AI } from "@/lib/constants";
@@ -131,16 +131,9 @@ describe("Cell", () => {
 
   it("is wrapped with React.memo", () => {
     // React.memo wraps the component in an object whose $$typeof is Symbol(react.memo)
-    // We check that re-rendering with identical props does not unmount/remount.
-    const renderSpy = jest.fn();
-
-    // Render twice with same props — a non-memoised component would re-render
-    // both times, but with React.memo the second render is skipped.
     // We test this indirectly: the component type should be a memo object.
-    const CellModule = require("@/components/Cell");
-    const CellDefault = CellModule.default;
 
     // React.memo components have a $$typeof of Symbol(react.memo)
-    expect(CellDefault.$$typeof?.toString()).toContain("react.memo");
+    expect((Cell as { $$typeof?: symbol }).$$typeof?.toString()).toContain("react.memo");
   });
 });
