@@ -29,14 +29,17 @@ export const DEPTH_MAP: Record<Difficulty, number> = {
 };
 
 // Victor-rules evaluation weights (Allis's strategic rules)
-export const VICTOR_CLAIMEVEN_3 = 40;
-export const VICTOR_CLAIMEVEN_2 = 10;
-export const VICTOR_CLAIMEVEN_1 = 3;
-export const VICTOR_BEFORE_3 = 60;
-export const VICTOR_BEFORE_2 = 20;
-export const VICTOR_VERTICAL_3 = 20;
-export const VICTOR_VERTICAL_2 = 8;
-export const VICTOR_AFTEREVEN_3 = 25;
-export const VICTOR_AFTEREVEN_2 = 8;
-export const VICTOR_BASEINVERSE = 15;
-export const VICTOR_LOWINVERSE = 12;
+// Weights are scaled to be significant relative to the base evaluation
+// (SCORE_THREE=5 per window × many windows) so the strategic analysis
+// reliably influences move selection at depth 8+.
+export const VICTOR_CLAIMEVEN_3 = 100;
+export const VICTOR_CLAIMEVEN_2 = 25;
+export const VICTOR_CLAIMEVEN_1 = 8;
+export const VICTOR_BEFORE_3 = 150;
+export const VICTOR_BEFORE_2 = 50;
+export const VICTOR_VERTICAL_3 = 50;
+export const VICTOR_VERTICAL_2 = 20;
+export const VICTOR_AFTEREVEN_3 = 60;
+export const VICTOR_AFTEREVEN_2 = 20;
+export const VICTOR_BASEINVERSE = 40;
+export const VICTOR_LOWINVERSE = 30;

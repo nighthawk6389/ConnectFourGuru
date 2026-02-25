@@ -69,8 +69,9 @@ interface Group {
  *   board[1] = Allis row 5 (odd)
  *   board[0] = Allis row 6 (even)
  *
- * First player (PLAYER) controls odd squares.
- * Second player (AI) controls even squares.
+ * First player controls odd squares, second player controls even squares.
+ * Use getFirstPlayer() to determine who went first — this handles inverted
+ * boards correctly (the simulation swaps PLAYER↔AI to let either side go first).
  */
 export function isOddSquare(row: number): boolean {
   return (ROWS - row) % 2 === 1;
@@ -78,6 +79,33 @@ export function isOddSquare(row: number): boolean {
 
 export function isEvenSquare(row: number): boolean {
   return (ROWS - row) % 2 === 0;
+}
+
+/**
+ * Determine who is the first player by counting pieces on the board.
+ * The first player always has equal or more pieces than the second player.
+ */
+export function getFirstPlayer(board: Board): Cell {
+  let playerCount = 0;
+  let aiCount = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (board[r][c] === PLAYER) playerCount++;
+      else if (board[r][c] === AI) aiCount++;
+    }
+  }
+  return playerCount >= aiCount ? PLAYER : AI;
+}
+
+/**
+ * Check if a square is on favorable parity for the given piece.
+ * First player controls odd squares, second player controls even squares.
+ */
+function isFavorableParity(row: number, piece: Cell, firstPlayer: Cell): boolean {
+  if (piece === firstPlayer) {
+    return isOddSquare(row);
+  }
+  return isEvenSquare(row);
 }
 
 /** A square is directly playable if it is empty and sits on the bottom row or on a filled square. */
@@ -181,14 +209,14 @@ export function enumerateGroups(board: Board): Group[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Claimeven: The second player (AI) can claim even-row squares by always
+ * Claimeven: The second player can claim even-row squares by always
  * responding in the same column. If all empty squares in a group are on
  * the favorable parity for the group's owner, the group is "secured."
  *
- * For AI groups: all empties on even rows → secured by AI.
- * For PLAYER groups: all empties on odd rows → secured by PLAYER.
+ * Parity is determined dynamically via `firstPlayer` so this works
+ * correctly even when the board has been inverted.
  */
-function scoreClaimeven(groups: Group[], piece: Cell): number {
+function scoreClaimeven(groups: Group[], piece: Cell, firstPlayer: Cell): number {
   let score = 0;
   const opp: Cell = piece === AI ? PLAYER : AI;
 
@@ -198,7 +226,7 @@ function scoreClaimeven(groups: Group[], piece: Cell): number {
     if (g.owner === piece) {
       // Our group: check if all empties are on our parity
       const allFavorable = g.emptySquares.every((sq) =>
-        piece === AI ? isEvenSquare(sq.row) : isOddSquare(sq.row)
+        isFavorableParity(sq.row, piece, firstPlayer)
       );
       if (allFavorable) {
         if (g.filledCount === 3) score += VICTOR_CLAIMEVEN_3;
@@ -208,7 +236,7 @@ function scoreClaimeven(groups: Group[], piece: Cell): number {
     } else {
       // Opponent's group: penalize if all empties are on their favorable parity
       const allFavorableForOpp = g.emptySquares.every((sq) =>
-        opp === AI ? isEvenSquare(sq.row) : isOddSquare(sq.row)
+        isFavorableParity(sq.row, opp, firstPlayer)
       );
       if (allFavorableForOpp) {
         if (g.filledCount === 3) score -= VICTOR_CLAIMEVEN_3;
@@ -278,7 +306,7 @@ function scoreBaseinverse(board: Board, groups: Group[], piece: Cell): number {
  * the opponent must fill the lower square first, giving the first player
  * the odd (upper) square.
  */
-function scoreVertical(board: Board, groups: Group[], piece: Cell): number {
+function scoreVertical(board: Board, groups: Group[], piece: Cell, firstPlayer: Cell): number {
   let score = 0;
   const opp: Cell = piece === AI ? PLAYER : AI;
 
@@ -289,9 +317,9 @@ function scoreVertical(board: Board, groups: Group[], piece: Cell): number {
       // r is upper, r+1 is lower
       if (!isOddSquare(r)) continue;
 
-      // The first player (PLAYER) benefits from this vertical pair
+      // The first player benefits from this vertical pair
       // because they control odd squares
-      const beneficiary = PLAYER;
+      const beneficiary = firstPlayer;
 
       // Find groups containing both squares
       for (const g of groups) {
@@ -387,11 +415,11 @@ function scoreBefore(board: Board, groups: Group[], piece: Cell): number {
 
 /**
  * Aftereven: If all empty squares in a group can be claimed via Claimeven
- * (all on even rows for AI, all on odd rows for PLAYER), then the group
- * will eventually be completed. This grants a stronger bonus than plain
- * Claimeven because completion is guaranteed.
+ * (all on favorable parity), then the group will eventually be completed.
+ * This grants a stronger bonus than plain Claimeven because completion is
+ * guaranteed.
  */
-function scoreAftereven(groups: Group[], piece: Cell): number {
+function scoreAftereven(groups: Group[], piece: Cell, firstPlayer: Cell): number {
   let score = 0;
 
   for (const g of groups) {
@@ -400,7 +428,7 @@ function scoreAftereven(groups: Group[], piece: Cell): number {
 
     // Check if ALL empty squares are on favorable parity
     const allClaimable = g.emptySquares.every((sq) =>
-      piece === AI ? isEvenSquare(sq.row) : isOddSquare(sq.row)
+      isFavorableParity(sq.row, piece, firstPlayer)
     );
 
     if (!allClaimable) continue;
@@ -496,13 +524,14 @@ function scoreLowinverse(board: Board, groups: Group[], piece: Cell): number {
  */
 export function victorEvaluate(board: Board, piece: Cell): number {
   const groups = enumerateGroups(board);
+  const firstPlayer = getFirstPlayer(board);
 
   return (
-    scoreClaimeven(groups, piece) +
+    scoreClaimeven(groups, piece, firstPlayer) +
     scoreBaseinverse(board, groups, piece) +
-    scoreVertical(board, groups, piece) +
+    scoreVertical(board, groups, piece, firstPlayer) +
     scoreBefore(board, groups, piece) +
-    scoreAftereven(groups, piece) +
+    scoreAftereven(groups, piece, firstPlayer) +
     scoreLowinverse(board, groups, piece)
   );
 }
@@ -516,6 +545,7 @@ export function victorMoveOrder(
   piece: Cell,
   cols: number[]
 ): number[] {
+  const firstPlayer = getFirstPlayer(board);
   const scored = cols.map((col) => {
     const row = getDropRow(board, col);
     if (row < 0) return { col, score: -Infinity };
@@ -526,8 +556,7 @@ export function victorMoveOrder(
     moveScore += (3 - Math.abs(col - 3)) * 2;
 
     // Parity: prefer moves that land on our favorable parity
-    if (piece === AI && isEvenSquare(row)) moveScore += 4;
-    if (piece === PLAYER && isOddSquare(row)) moveScore += 4;
+    if (isFavorableParity(row, piece, firstPlayer)) moveScore += 4;
 
     // Threat analysis: count how many of our groups this move advances
     // and how many opponent groups it blocks

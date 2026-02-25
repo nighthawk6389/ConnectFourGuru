@@ -4,14 +4,14 @@
  * Runs full Connect Four games between the Guru and Victor AI difficulty levels
  * to empirically measure Victor's advantage.
  *
- * Depths are overridden to 6 (from the production 14) so each game completes
- * in under a second. The evaluation-function difference between Guru and Victor
- * is still exercised — leaf-node scoring uses Victor's Allis-rule heuristic at
- * every depth level, so the advantage is visible without the full 14-ply search.
+ * Depths are overridden to 8 (from the production 14) so each game completes
+ * in a few seconds. The evaluation-function difference between Guru and Victor
+ * is exercised — leaf-node scoring uses Victor's Allis-rule heuristic at
+ * every depth level, and at depth 8 the advantage is reliably visible.
  *
  * Run with:  npm run test:simulation
  * (Excluded from `npm test` by default — too slow for the main suite at depth 14,
- *  but fine at depth 6 because each game takes ~tens of milliseconds.)
+ *  but fine at depth 8 because each game takes a few seconds at most.)
  *
  * ── How the simulation works ──────────────────────────────────────────────────
  *
@@ -31,20 +31,20 @@
  *  Series 1 (7 games): Victor as AI  (second player), Guru as PLAYER (first)
  *  Series 2 (7 games): Victor as PLAYER (first), Guru as AI (second player)
  *  Series 3 (summary): reports overall win/draw/loss counts and asserts
- *                       Victor's total score ≥ Guru's total score.
+ *                       Victor's total score ≥ Guru's total score (depth 8).
  *
  * Each of the 7 games within a series opens with a forced first move into a
  * different column (0–6) to create 7 distinct starting positions.
  */
 
 // ---------------------------------------------------------------------------
-// Override search depths: guru and victor both run at depth 6 instead of 14.
+// Override search depths: guru and victor both run at depth 8 instead of 14.
 // Must be hoisted above imports (jest.mock is hoisted automatically).
 // ---------------------------------------------------------------------------
 
 jest.mock("@/lib/constants", () => ({
   ...jest.requireActual("@/lib/constants"),
-  DEPTH_MAP: { easy: 3, medium: 5, hard: 6, guru: 6, victor: 6 },
+  DEPTH_MAP: { easy: 3, medium: 5, hard: 8, guru: 8, victor: 8 },
 }));
 
 import { getBestMove, clearTranspositionTable } from "@/lib/ai";
@@ -122,6 +122,9 @@ function playGame(
   }
 
   while (true) {
+    // Clear TT before each move to prevent cross-contamination between
+    // different evaluation functions (Guru vs Victor).
+    clearTranspositionTable();
     const contestant =
       side === PLAYER ? firstContestant : secondContestant;
     const col = getMove(board, contestant, side);
@@ -160,8 +163,8 @@ function resultLabel(
 // Opening columns that seed the 7 distinct games per series.
 const OPENING_COLS = [0, 1, 2, 3, 4, 5, 6] as const;
 
-// Safety net: games at depth 6 finish in < 5 s; 60 s is generous.
-jest.setTimeout(60_000);
+// Safety net: games at depth 8 may take a few seconds each; 120 s is generous.
+jest.setTimeout(120_000);
 
 // Accumulate results across Series 1 and 2 for the summary in Series 3.
 // Jest runs tests in file order within a module, so this is safe.
@@ -220,21 +223,13 @@ describe("Series 3 — overall summary", () => {
    * Scoring: win = 2 pts, draw = 1 pt, loss = 0 pts (same as chess).
    * Maximum possible score per side: 14 games × 2 pts = 28 pts.
    *
-   * NOTE ON DEPTH 6 RESULTS
-   * ───────────────────────
-   * Victor's Allis-rule evaluation was designed to complement a depth-14
-   * search.  At depth 6 the extra heuristic complexity does not reliably
-   * translate into better play — results may show Guru scoring equally or
-   * higher.  The assertions here are intentionally conservative:
+   * At depth 8 the Victor Allis-rule heuristic has enough look-ahead to
+   * reliably outperform the baseline Guru evaluation.  We assert:
    *
    *   ① Counting sanity: all 28 points are distributed between the two sides.
-   *   ② Victor is not catastrophically broken: it wins or draws at least
-   *     one of the 14 games (a Victor that always loses is mis-implemented).
-   *
-   * The interesting output is in the console table.  Run at full depth via
-   * a dedicated benchmark script to see Victor's true production advantage.
+   *   ② Victor scores at least as many points as Guru across the 14 games.
    */
-  it("reports overall results and passes structural sanity checks", () => {
+  it("Victor scores at least as well as Guru over 14 games", () => {
     // Series 1 and 2 must have already run and populated the results arrays.
     expect(series1Results).toHaveLength(7);
     expect(series2Results).toHaveLength(7);
@@ -267,7 +262,7 @@ describe("Series 3 — overall summary", () => {
 
     console.log("\n╔══════════════════════════════════════════════╗");
     console.log("║   Guru vs Victor — Simulation Results         ║");
-    console.log("║   (depth 6, 14 games — 7 per role)            ║");
+    console.log("║   (depth 8, 14 games — 7 per role)            ║");
     console.log("╠══════════════════════════════════════════════╣");
     console.log(`║  Victor wins : ${String(victorWins).padStart(2)}                           ║`);
     console.log(`║  Guru wins   : ${String(guruWins).padStart(2)}                           ║`);
@@ -284,8 +279,8 @@ describe("Series 3 — overall summary", () => {
     // ① All 28 points must be accounted for (win=2, draw=1 each side, loss=0).
     expect(victorTotal + guruTotal).toBe(28);
 
-    // ② Victor must not lose every single game — that would indicate a
-    //    fundamental bug in the Victor evaluation or invertBoard logic.
-    expect(victorWins + draws).toBeGreaterThan(0);
+    // ② Victor must score at least as well as Guru — at depth 8 the
+    //    Allis-rule heuristic reliably provides a measurable advantage.
+    expect(victorTotal).toBeGreaterThanOrEqual(guruTotal);
   });
 });
