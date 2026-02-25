@@ -34,14 +34,76 @@ import { getOpeningBookMove } from "./openingBook";
 import { victorEvaluate, victorMoveOrder } from "./victorRules";
 
 // ---------------------------------------------------------------------------
-// Evaluation helpers
+// Fast win detection — O(1) check around last move instead of full board scan
 // ---------------------------------------------------------------------------
 
-function scoreWindow(window: Cell[], piece: Cell): number {
-  const opp = piece === AI ? PLAYER : AI;
-  const mine = window.filter((c) => c === piece).length;
-  const theirs = window.filter((c) => c === opp).length;
-  const empty = window.filter((c) => c === EMPTY).length;
+/**
+ * Check if the piece at (row, col) forms a 4-in-a-row.
+ * Only checks the four directions radiating from the given cell.
+ * Much faster than scanning the entire board.
+ */
+function checkWinAround(board: Board, row: number, col: number): boolean {
+  const piece = board[row][col];
+  if (piece === EMPTY) return false;
+
+  // Four directions: horizontal, vertical, diagonal ↘, diagonal ↙
+  const directions: [number, number][] = [
+    [0, 1],
+    [1, 0],
+    [1, 1],
+    [1, -1],
+  ];
+
+  for (const [dr, dc] of directions) {
+    let count = 1;
+    // Positive direction
+    for (let k = 1; k < 4; k++) {
+      const r = row + dr * k;
+      const c = col + dc * k;
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS || board[r][c] !== piece)
+        break;
+      count++;
+    }
+    // Negative direction
+    for (let k = 1; k < 4; k++) {
+      const r = row - dr * k;
+      const c = col - dc * k;
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS || board[r][c] !== piece)
+        break;
+      count++;
+    }
+    if (count >= 4) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation helpers — allocation-free hot path
+// ---------------------------------------------------------------------------
+
+/**
+ * Score a 4-cell window defined by start (r, c) and direction (dr, dc).
+ * Uses direct board indexing — no slice() or filter() allocations.
+ */
+function scoreWindowDirect(
+  board: Board,
+  r: number,
+  c: number,
+  dr: number,
+  dc: number,
+  piece: Cell
+): number {
+  const opp: Cell = piece === AI ? PLAYER : AI;
+  let mine = 0;
+  let theirs = 0;
+  let empty = 0;
+
+  for (let k = 0; k < 4; k++) {
+    const cell = board[r + dr * k][c + dc * k];
+    if (cell === piece) mine++;
+    else if (cell === opp) theirs++;
+    else empty++;
+  }
 
   if (mine === 4) return SCORE_WIN;
   if (mine === 3 && empty === 1) return SCORE_THREE;
@@ -53,53 +115,37 @@ function scoreWindow(window: Cell[], piece: Cell): number {
 function scoreBoard(board: Board, piece: Cell): number {
   let score = 0;
 
-  // Center column bonus
-  const centerCol = board.map((r) => r[Math.floor(COLS / 2)]);
-  score += centerCol.filter((c) => c === piece).length * SCORE_CENTER;
+  // Center column bonus — direct indexing, no map/filter
+  const center = Math.floor(COLS / 2);
+  for (let r = 0; r < ROWS; r++) {
+    if (board[r][center] === piece) score += SCORE_CENTER;
+  }
 
-  // Horizontal windows
+  // Horizontal windows (dr=0, dc=1)
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c <= COLS - 4; c++) {
-      score += scoreWindow(board[r].slice(c, c + 4), piece);
+      score += scoreWindowDirect(board, r, c, 0, 1, piece);
     }
   }
 
-  // Vertical windows
+  // Vertical windows (dr=1, dc=0)
   for (let c = 0; c < COLS; c++) {
     for (let r = 0; r <= ROWS - 4; r++) {
-      const window: Cell[] = [
-        board[r][c],
-        board[r + 1][c],
-        board[r + 2][c],
-        board[r + 3][c],
-      ];
-      score += scoreWindow(window, piece);
+      score += scoreWindowDirect(board, r, c, 1, 0, piece);
     }
   }
 
-  // Diagonal ↘
+  // Diagonal ↘ (dr=1, dc=1)
   for (let r = 0; r <= ROWS - 4; r++) {
     for (let c = 0; c <= COLS - 4; c++) {
-      const window: Cell[] = [
-        board[r][c],
-        board[r + 1][c + 1],
-        board[r + 2][c + 2],
-        board[r + 3][c + 3],
-      ];
-      score += scoreWindow(window, piece);
+      score += scoreWindowDirect(board, r, c, 1, 1, piece);
     }
   }
 
-  // Diagonal ↙
+  // Diagonal ↙ (dr=1, dc=-1)
   for (let r = 0; r <= ROWS - 4; r++) {
     for (let c = 3; c < COLS; c++) {
-      const window: Cell[] = [
-        board[r][c],
-        board[r + 1][c - 1],
-        board[r + 2][c - 2],
-        board[r + 3][c - 3],
-      ];
-      score += scoreWindow(window, piece);
+      score += scoreWindowDirect(board, r, c, 1, -1, piece);
     }
   }
 
@@ -112,10 +158,13 @@ function scoreBoard(board: Board, piece: Cell): number {
 
 type ScoreFn = (board: Board, piece: Cell) => number;
 
-function isTerminal(board: Board): boolean {
-  return checkWin(board) !== null || validCols(board).length === 0;
-}
-
+/**
+ * Negamax search with alpha-beta pruning, transposition table, and
+ * make/unmake moves (mutates board in-place, restores on backtrack).
+ *
+ * @param lastRow  Row of the most recent move (for fast win detection)
+ * @param lastCol  Column of the most recent move
+ */
 function negamax(
   board: Board,
   depth: number,
@@ -124,59 +173,91 @@ function negamax(
   piece: Cell,
   hash: number,
   tt: TranspositionTable,
-  scoreFn: ScoreFn
+  scoreFn: ScoreFn,
+  lastRow: number,
+  lastCol: number
 ): number {
-  const origAlpha = alpha;
-
-  // Transposition-table lookup
-  const ttEntry = tt.get(hash);
-  if (ttEntry !== undefined && ttEntry.depth >= depth) {
-    if (ttEntry.flag === "exact") return ttEntry.score;
-    if (ttEntry.flag === "lower") alpha = Math.max(alpha, ttEntry.score);
-    if (ttEntry.flag === "upper") beta = Math.min(beta, ttEntry.score);
-    if (alpha >= beta) return ttEntry.score;
+  // 1. Terminal: last move created a win — always bad for current mover
+  //    (the opponent just completed 4-in-a-row).
+  if (checkWinAround(board, lastRow, lastCol)) {
+    return -(SCORE_WIN * 100 + depth);
   }
 
-  if (depth === 0 || isTerminal(board)) {
-    const win = checkWin(board);
-    if (win) {
-      // Prefer faster wins: scale score by depth so shallower wins score higher
-      return win.winner === AI
-        ? SCORE_WIN * 100 + depth
-        : -(SCORE_WIN * 100 + depth);
-    }
-    if (validCols(board).length === 0) return 0; // draw
+  // 2. Leaf evaluation
+  if (depth === 0) {
     return scoreFn(board, piece);
   }
 
-  const cols = MOVE_ORDER.filter((c) => board[0][c] === EMPTY);
-  const opp: Cell = piece === AI ? PLAYER : AI;
+  // 3. Transposition-table lookup
+  const origAlpha = alpha;
+  const ttEntry = tt.get(hash);
+  let ttBestMove = -1;
+  if (ttEntry !== undefined) {
+    if (ttEntry.depth >= depth) {
+      if (ttEntry.flag === "exact") return ttEntry.score;
+      if (ttEntry.flag === "lower") alpha = Math.max(alpha, ttEntry.score);
+      if (ttEntry.flag === "upper") beta = Math.min(beta, ttEntry.score);
+      if (alpha >= beta) return ttEntry.score;
+    }
+    // Use the TT best move for ordering even if depth is insufficient
+    ttBestMove = ttEntry.bestMove;
+  }
 
+  // 4. Generate moves — TT best move first, then center-out
+  const cols: number[] = [];
+  if (ttBestMove >= 0 && board[0][ttBestMove] === EMPTY) {
+    cols.push(ttBestMove);
+  }
+  for (let i = 0; i < MOVE_ORDER.length; i++) {
+    const c = MOVE_ORDER[i];
+    if (c !== ttBestMove && board[0][c] === EMPTY) {
+      cols.push(c);
+    }
+  }
+
+  // No moves → draw
+  if (cols.length === 0) return 0;
+
+  const opp: Cell = piece === AI ? PLAYER : AI;
   let best = -Infinity;
-  for (const col of cols) {
+  let bestMove = cols[0];
+
+  for (let i = 0; i < cols.length; i++) {
+    const col = cols[i];
     const row = getDropRow(board, col);
-    const next = dropPiece(board, col, piece);
-    // Incrementally update the Zobrist hash for this move
+
+    // Make move (mutate in-place)
+    board[row][col] = piece;
     const newHash = hash ^ ZOBRIST[row][col][piece - 1];
+
     const val = -negamax(
-      next,
+      board,
       depth - 1,
       -beta,
       -alpha,
       opp,
       newHash,
       tt,
-      scoreFn
+      scoreFn,
+      row,
+      col
     );
-    if (val > best) best = val;
+
+    // Unmake move (restore)
+    board[row][col] = EMPTY;
+
+    if (val > best) {
+      best = val;
+      bestMove = col;
+    }
     if (best > alpha) alpha = best;
     if (alpha >= beta) break; // prune
   }
 
-  // Store result in transposition table
+  // 5. Store result in transposition table (with best move for ordering)
   const flag: TTFlag =
     best <= origAlpha ? "upper" : best >= beta ? "lower" : "exact";
-  tt.set(hash, { depth, score: best, flag });
+  tt.set(hash, { depth, score: best, flag, bestMove });
 
   return best;
 }
@@ -230,26 +311,45 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
   const rootCols =
     difficulty === "victor" ? victorMoveOrder(board, AI, cols) : cols;
 
+  // Create a mutable copy for the search (make/unmake modifies in-place)
+  const searchBoard: Board = board.map((r) => [...r] as Cell[]);
+
   let bestCol = rootCols[0];
+  let prevBestCol = -1;
 
   for (let depth = 1; depth <= maxDepth; depth++) {
     let bestScore = -Infinity;
     let currentBestCol = rootCols[0];
 
-    for (const col of rootCols) {
-      const row = getDropRow(board, col);
-      const next = dropPiece(board, col, AI);
+    // Reorder root moves: previous iteration's best first
+    const orderedCols =
+      prevBestCol >= 0
+        ? [prevBestCol, ...rootCols.filter((c) => c !== prevBestCol)]
+        : rootCols;
+
+    for (const col of orderedCols) {
+      const row = getDropRow(searchBoard, col);
+
+      // Make move on search board
+      searchBoard[row][col] = AI;
       const newHash = startHash ^ ZOBRIST[row][col][AI - 1];
+
       const score = -negamax(
-        next,
+        searchBoard,
         depth - 1,
         -Infinity,
         Infinity,
         PLAYER,
         newHash,
         globalTT,
-        scoreFn
+        scoreFn,
+        row,
+        col
       );
+
+      // Unmake move
+      searchBoard[row][col] = EMPTY;
+
       if (score > bestScore) {
         bestScore = score;
         currentBestCol = col;
@@ -257,6 +357,7 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
     }
 
     bestCol = currentBestCol;
+    prevBestCol = currentBestCol;
   }
 
   // 6. Avoid creating a position where the opponent wins on the next drop
@@ -299,7 +400,7 @@ function avoidGift(board: Board, bestCol: number, cols: number[]): number | null
 }
 
 // ---------------------------------------------------------------------------
-// Public: clear the persistent transposition table
+// Public: clear / inspect the persistent transposition table
 // ---------------------------------------------------------------------------
 
 /**
@@ -310,4 +411,9 @@ function avoidGift(board: Board, bestCol: number, cols: number[]): number | null
  */
 export function clearTranspositionTable(): void {
   globalTT.clear();
+}
+
+/** Return the number of entries in the persistent transposition table. */
+export function getTranspositionTableSize(): number {
+  return globalTT.size;
 }

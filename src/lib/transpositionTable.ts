@@ -54,6 +54,7 @@ export interface TTEntry {
   depth: number;
   score: number;
   flag: TTFlag;
+  bestMove: number;
 }
 
 /**
