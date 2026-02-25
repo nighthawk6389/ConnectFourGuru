@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import confetti from "canvas-confetti";
 import { PLAYER } from "@/lib/constants";
 import { WinResult } from "@/lib/game";
 
@@ -15,6 +17,19 @@ export default function WinnerModal({
   onNewGame,
 }: WinnerModalProps) {
   const show = winResult !== null || isDraw;
+
+  // Fire confetti when the human player wins
+  useEffect(() => {
+    if (winResult?.winner === PLAYER) {
+      confetti({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.55 },
+        colors: ["#ef4444", "#f87171", "#ffffff", "#fbbf24"],
+      });
+    }
+  }, [winResult]);
+
   if (!show) return null;
 
   let emoji: string;

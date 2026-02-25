@@ -42,3 +42,19 @@ body {
 .animate-pop {
   animation: popIn 0.2s ease-out forwards;
 }
+
+/* Winning-cell pulse / glow animation */
+@keyframes winPulse {
+  0%, 100% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.5);
+  }
+  50% {
+    transform: scale(1.18);
+    box-shadow: 0 0 14px 6px rgba(255, 255, 255, 0.15);
+  }
+}
+
+.win-pulse {
+  animation: winPulse 0.8s ease-in-out infinite;
+}

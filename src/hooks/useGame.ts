@@ -5,6 +5,10 @@ import { Board, Difficulty, PLAYER, AI } from "@/lib/constants";
 import { emptyBoard, dropPiece, checkWin, isDraw, WinResult } from "@/lib/game";
 import { getBestMove } from "@/lib/ai";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 export type GamePhase = "idle" | "player" | "thinking" | "over";
 
 export interface Score {
@@ -26,17 +30,67 @@ export interface GameState {
   handleColHover: (col: number | null) => void;
 }
 
+// ---------------------------------------------------------------------------
+// Persistent score — localStorage helpers
+// ---------------------------------------------------------------------------
+
+const SCORE_KEY = "connect-four-score";
+
+function loadScore(): Score {
+  try {
+    if (typeof window === "undefined") return { player: 0, ai: 0, draws: 0 };
+    const saved = localStorage.getItem(SCORE_KEY);
+    if (saved) {
+      const parsed: unknown = JSON.parse(saved);
+      if (
+        parsed !== null &&
+        typeof parsed === "object" &&
+        "player" in parsed &&
+        "ai" in parsed &&
+        "draws" in parsed &&
+        typeof (parsed as Record<string, unknown>).player === "number" &&
+        typeof (parsed as Record<string, unknown>).ai === "number" &&
+        typeof (parsed as Record<string, unknown>).draws === "number"
+      ) {
+        return parsed as Score;
+      }
+    }
+  } catch {
+    // Ignore storage errors (private mode, quota exceeded, etc.)
+  }
+  return { player: 0, ai: 0, draws: 0 };
+}
+
+function saveScore(score: Score): void {
+  try {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(SCORE_KEY, JSON.stringify(score));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
+
 export function useGame(): GameState {
   const [board, setBoard] = useState<Board>(emptyBoard);
   const [phase, setPhase] = useState<GamePhase>("player");
   const [winResult, setWinResult] = useState<WinResult>(null);
-  const [score, setScore] = useState<Score>({ player: 0, ai: 0, draws: 0 });
+  // Initialise score from localStorage so it persists across page refreshes
+  const [score, setScore] = useState<Score>(loadScore);
   const [difficulty, setDifficultyState] = useState<Difficulty>("medium");
   const [hoverCol, setHoverCol] = useState<number | null>(null);
 
-  // Keep a ref to difficulty so the AI timeout closure always sees current value
+  // Keep a ref to difficulty so the AI timeout/worker closure always sees current value
   const difficultyRef = useRef<Difficulty>(difficulty);
   difficultyRef.current = difficulty;
+
+  // Persist score to localStorage whenever it changes
+  useEffect(() => {
+    saveScore(score);
+  }, [score]);
 
   const endGame = useCallback((result: WinResult, currentBoard: Board) => {
     setWinResult(result);
@@ -53,22 +107,63 @@ export function useGame(): GameState {
     }
   }, []);
 
-  // AI move — runs whenever phase becomes "thinking"
+  // AI move — runs whenever phase becomes "thinking".
+  // Uses a Web Worker when available so the search never blocks the main thread.
+  // Falls back to a synchronous setTimeout call (also used in Jest/jsdom where
+  // Worker is undefined).
   useEffect(() => {
     if (phase !== "thinking") return;
 
-    const id = setTimeout(() => {
-      const col = getBestMove(board, difficultyRef.current);
-      const next = dropPiece(board, col, AI);
-      setBoard(next);
+    // Capture board & difficulty at the moment this effect fires
+    const currentBoard = board;
+    const currentDifficulty = difficultyRef.current;
 
+    const processAIMove = (col: number) => {
+      const next = dropPiece(currentBoard, col, AI);
+      setBoard(next);
       const win = checkWin(next);
       if (win || isDraw(next)) {
         endGame(win, next);
       } else {
         setPhase("player");
       }
-    }, 300); // short delay so "thinking" indicator is visible
+    };
+
+    // Try Web Worker path (non-blocking)
+    if (typeof Worker !== "undefined") {
+      let worker: Worker | null = null;
+      try {
+        worker = new Worker(
+          new URL("../lib/ai.worker.ts", import.meta.url)
+        );
+
+        worker.onmessage = (e: MessageEvent<{ col: number }>) => {
+          processAIMove(e.data.col);
+        };
+
+        worker.onerror = () => {
+          // Worker failed mid-flight — fall back to synchronous
+          worker?.terminate();
+          const col = getBestMove(currentBoard, currentDifficulty);
+          processAIMove(col);
+        };
+
+        worker.postMessage({ board: currentBoard, difficulty: currentDifficulty });
+
+        return () => {
+          worker?.terminate();
+        };
+      } catch {
+        // Worker construction failed (e.g. CSP or bundler issue) — fall through
+        worker?.terminate();
+      }
+    }
+
+    // Synchronous fallback with short delay so "thinking" indicator is visible
+    const id = setTimeout(() => {
+      const col = getBestMove(currentBoard, currentDifficulty);
+      processAIMove(col);
+    }, 300);
 
     return () => clearTimeout(id);
   }, [phase, board, endGame]);

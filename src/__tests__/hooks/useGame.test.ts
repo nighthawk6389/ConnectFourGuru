@@ -17,6 +17,8 @@ jest.mock("@/lib/ai", () => ({
 // Fake timers so we control the AI setTimeout
 beforeEach(() => {
   jest.useFakeTimers();
+  // Clear localStorage before each test to avoid cross-test score pollution
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -42,7 +44,7 @@ describe("useGame — initial state", () => {
     expect(result.current.phase).toBe("player");
   });
 
-  it("starts with zero score", () => {
+  it("starts with zero score when localStorage is empty", () => {
     const { result } = renderHook(() => useGame());
     expect(result.current.score).toEqual({ player: 0, ai: 0, draws: 0 });
   });
@@ -55,6 +57,31 @@ describe("useGame — initial state", () => {
   it("starts with no win result", () => {
     const { result } = renderHook(() => useGame());
     expect(result.current.winResult).toBeNull();
+  });
+
+  it("loads a pre-existing score from localStorage", () => {
+    // Seed localStorage before the hook mounts
+    localStorage.setItem(
+      "connect-four-score",
+      JSON.stringify({ player: 5, ai: 3, draws: 1 })
+    );
+    const { result } = renderHook(() => useGame());
+    expect(result.current.score).toEqual({ player: 5, ai: 3, draws: 1 });
+  });
+
+  it("ignores corrupted localStorage data and falls back to zero score", () => {
+    localStorage.setItem("connect-four-score", "not-valid-json{{{");
+    const { result } = renderHook(() => useGame());
+    expect(result.current.score).toEqual({ player: 0, ai: 0, draws: 0 });
+  });
+
+  it("ignores localStorage data with missing fields", () => {
+    localStorage.setItem(
+      "connect-four-score",
+      JSON.stringify({ player: 2 }) // missing ai and draws
+    );
+    const { result } = renderHook(() => useGame());
+    expect(result.current.score).toEqual({ player: 0, ai: 0, draws: 0 });
   });
 });
 
@@ -243,5 +270,55 @@ describe("useGame — score tracking", () => {
       result.current.score.ai +
       result.current.score.draws;
     expect(total).toBeLessThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Persistent score — localStorage
+// ---------------------------------------------------------------------------
+
+describe("useGame — persistent score (localStorage)", () => {
+  it("saves score to localStorage after each update", () => {
+    const { getBestMove } = require("@/lib/ai");
+    getBestMove.mockReturnValue(3);
+
+    const { result } = renderHook(() => useGame());
+
+    // Simulate 4 rounds until AI wins (or some game-end)
+    for (let i = 0; i < 4; i++) {
+      if (result.current.phase !== "player") break;
+      act(() => result.current.handleColClick(0));
+      act(() => jest.runOnlyPendingTimers());
+      if (result.current.phase === "over") break;
+    }
+
+    // Whatever the outcome, localStorage should reflect the current score
+    const saved = JSON.parse(localStorage.getItem("connect-four-score") ?? "{}");
+    expect(saved).toMatchObject({
+      player: result.current.score.player,
+      ai: result.current.score.ai,
+      draws: result.current.score.draws,
+    });
+  });
+
+  it("persists score across a newGame call (score is not reset)", () => {
+    const { getBestMove } = require("@/lib/ai");
+    getBestMove.mockReturnValue(3);
+
+    const { result } = renderHook(() => useGame());
+
+    // Simulate game until AI wins (or game-end)
+    for (let i = 0; i < 4; i++) {
+      if (result.current.phase !== "player") break;
+      act(() => result.current.handleColClick(0));
+      act(() => jest.runOnlyPendingTimers());
+      if (result.current.phase === "over") break;
+    }
+
+    const scoreBefore = { ...result.current.score };
+    act(() => result.current.newGame());
+
+    // Score must be unchanged after newGame
+    expect(result.current.score).toEqual(scoreBefore);
   });
 });
