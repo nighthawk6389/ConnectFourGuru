@@ -13,6 +13,7 @@
  *   4. Player wins — player completes a horizontal 4-in-a-row
  *   5. CPU wins — AI completes a vertical 4-in-a-row; modal appears
  *   6. Play Again — modal's "Play Again" button restarts the game
+ *   7. First-move toggle — You First / CPU First buttons control who starts
  */
 
 import { test, expect, Page } from "@playwright/test";
@@ -108,11 +109,13 @@ test.describe("Difficulty selector", () => {
     await expect(mediumBtn).not.toHaveClass(/bg-blue-500/);
   });
 
-  test("all four difficulty buttons are present", async ({ page }) => {
+  test("all five difficulty buttons are present", async ({ page }) => {
     await page.goto("/");
     for (const label of ["Easy", "Medium", "Hard", "Guru"]) {
       await expect(page.getByRole("button", { name: label })).toBeVisible();
     }
+    // Victor needs exact match — VictorSidebar also has a button containing "Victor"
+    await expect(page.getByRole("button", { name: "Victor", exact: true })).toBeVisible();
   });
 });
 
@@ -299,5 +302,101 @@ test.describe("Play Again", () => {
     await expect(page.getByText("Your turn — click a column")).toBeVisible({
       timeout: 10_000,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7 — First-move toggle (You First / CPU First)
+// ---------------------------------------------------------------------------
+
+test.describe("First-move toggle", () => {
+  test("'You First' and 'CPU First' buttons are visible on load", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "You First" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "CPU First" })).toBeVisible();
+  });
+
+  test("'You First' is highlighted by default", async ({ page }) => {
+    await page.goto("/");
+    const youFirst = page.getByRole("button", { name: "You First" });
+    const cpuFirst = page.getByRole("button", { name: "CPU First" });
+
+    await expect(youFirst).toHaveClass(/bg-red-500/);
+    await expect(cpuFirst).not.toHaveClass(/bg-yellow-500/);
+  });
+
+  test("clicking 'CPU First' highlights it and un-highlights 'You First'", async ({ page }) => {
+    await page.goto("/");
+    const youFirst = page.getByRole("button", { name: "You First" });
+    const cpuFirst = page.getByRole("button", { name: "CPU First" });
+
+    await cpuFirst.click();
+
+    await expect(cpuFirst).toHaveClass(/bg-yellow-500/);
+    await expect(youFirst).not.toHaveClass(/bg-red-500/);
+  });
+
+  test("CPU moves first after selecting 'CPU First' and clicking 'New Game'", async ({ page }) => {
+    await page.goto("/");
+    await mockAIColumn(page, 3);
+
+    // Switch to CPU-first mode
+    await page.getByRole("button", { name: "CPU First" }).click();
+    await page.getByRole("button", { name: "New Game" }).click();
+
+    // The CPU should be thinking — wait for the AI to finish and player turn to begin
+    await expect(
+      page.getByText("Your turn — click a column")
+    ).toBeVisible({ timeout: 15_000 });
+
+    // The AI (mocked to col 3) should have placed a piece — verify the board
+    // has changed by confirming the player can now make a move successfully
+    await clickColumnAndWaitForTurn(page, 0);
+  });
+
+  test("player can win a game started in CPU-first mode", async ({ page }) => {
+    await page.goto("/");
+
+    // CPU goes first — it gets 4 total turns vs the player's 4.
+    // If the AI always plays col 6 it would get a vertical 4-in-a-row before
+    // the player can finish.  So mock the AI to play col 5 for the opening
+    // move, then switch to col 6 for the rest (only 3 pieces in col 6).
+    await mockAIColumn(page, 5);
+
+    // Switch to CPU-first mode
+    await page.getByRole("button", { name: "CPU First" }).click();
+    await page.getByRole("button", { name: "New Game" }).click();
+
+    // Wait for AI to make its opening move (col 5), then player turn begins
+    await expect(
+      page.getByText("Your turn — click a column")
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Switch AI to col 6 for the remaining moves
+    await mockAIColumn(page, 6);
+
+    // Player builds horizontal 4-in-a-row at cols 0-3; AI plays col 6 three times
+    await clickColumnAndWaitForTurn(page, 0);
+    await clickColumnAndWaitForTurn(page, 1);
+    await clickColumnAndWaitForTurn(page, 2);
+    await clickColumnAndWaitForTurn(page, 3, true);
+
+    await expect(page.getByText("You Win!")).toBeVisible({ timeout: 5_000 });
+  });
+
+  test("toggling back to 'You First' restores normal play order", async ({ page }) => {
+    await page.goto("/");
+    await mockAIColumn(page, 6);
+
+    // Switch to CPU first, then back to player first
+    await page.getByRole("button", { name: "CPU First" }).click();
+    await page.getByRole("button", { name: "You First" }).click();
+    await page.getByRole("button", { name: "New Game" }).click();
+
+    // Should start with player turn immediately
+    await expect(page.getByText("Your turn — click a column")).toBeVisible();
+
+    // Verify player can click and game proceeds normally
+    await clickColumnAndWaitForTurn(page, 0);
   });
 });
