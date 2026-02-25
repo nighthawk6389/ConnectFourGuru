@@ -23,9 +23,9 @@ export type Difficulty = "easy" | "medium" | "hard" | "guru" | "victor";
 export const DEPTH_MAP: Record<Difficulty, number> = {
   easy: 3,
   medium: 5,
-  hard: 10,
-  guru: 12,
-  victor: 12,
+  hard: 6,
+  guru: 8,
+  victor: 10,
 };
 
 // Victor-rules evaluation weights (Allis's strategic rules)
