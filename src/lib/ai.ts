@@ -192,7 +192,7 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
 function avoidGift(board: Board, bestCol: number, cols: number[]): number | null {
   const afterDrop = dropPiece(board, bestCol, AI);
   const row = getDropRow(afterDrop, bestCol);
-  if (row > 0) {
+  if (row >= 0) {
     // Check if opponent placing on top of our move wins
     const above = dropPiece(afterDrop, bestCol, PLAYER);
     if (checkWin(above)?.winner === PLAYER) {
@@ -201,7 +201,7 @@ function avoidGift(board: Board, bestCol: number, cols: number[]): number | null
         if (col === bestCol) continue;
         const alt = dropPiece(board, col, AI);
         const altRow = getDropRow(alt, col);
-        if (altRow <= 0) continue; // column now full, skip
+        if (altRow < 0) continue; // column now full after AI drop, skip
         const altAbove = dropPiece(alt, col, PLAYER);
         if (checkWin(altAbove)?.winner !== PLAYER) return col;
       }

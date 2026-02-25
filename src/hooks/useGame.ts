@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Board, Difficulty } from "@/lib/constants";
-import { PLAYER, AI } from "@/lib/constants";
-import { emptyBoard, dropPiece, checkWin, isDraw } from "@/lib/game";
+import { Board, Difficulty, PLAYER, AI } from "@/lib/constants";
+import { emptyBoard, dropPiece, checkWin, isDraw, WinResult } from "@/lib/game";
 import { getBestMove } from "@/lib/ai";
-import { WinResult } from "@/lib/game";
 
 export type GamePhase = "idle" | "player" | "thinking" | "over";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { PLAYER, AI } from "@/lib/constants";
+import { PLAYER } from "@/lib/constants";
 import { WinResult } from "@/lib/game";
 
 interface WinnerModalProps {
