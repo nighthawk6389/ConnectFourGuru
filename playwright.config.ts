@@ -49,9 +49,8 @@ export default defineConfig({
       name: "chromium",
       use: {
         browserName: "chromium",
-        headless: true,
-        executablePath: CHROMIUM_HEADLESS,
         launchOptions: {
+          headless: true,
           executablePath: CHROMIUM_HEADLESS,
           args: ["--no-sandbox", "--disable-setuid-sandbox"],
         },
