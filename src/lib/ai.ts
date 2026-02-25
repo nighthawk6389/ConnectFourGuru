@@ -16,6 +16,13 @@ import {
   Board,
 } from "./constants";
 import { dropPiece, checkWin, validCols, getDropRow } from "./game";
+import {
+  ZOBRIST,
+  computeBoardHash,
+  TranspositionTable,
+  TTFlag,
+} from "./transpositionTable";
+import { getOpeningBookMove } from "./openingBook";
 
 // ---------------------------------------------------------------------------
 // Evaluation helpers
@@ -91,13 +98,11 @@ function scoreBoard(board: Board, piece: Cell): number {
 }
 
 // ---------------------------------------------------------------------------
-// Negamax with alpha-beta pruning
+// Negamax with alpha-beta pruning + transposition table
 // ---------------------------------------------------------------------------
 
 function isTerminal(board: Board): boolean {
-  return (
-    checkWin(board) !== null || validCols(board).length === 0
-  );
+  return checkWin(board) !== null || validCols(board).length === 0;
 }
 
 function negamax(
@@ -105,8 +110,21 @@ function negamax(
   depth: number,
   alpha: number,
   beta: number,
-  piece: Cell
+  piece: Cell,
+  hash: number,
+  tt: TranspositionTable
 ): number {
+  const origAlpha = alpha;
+
+  // Transposition-table lookup
+  const ttEntry = tt.get(hash);
+  if (ttEntry !== undefined && ttEntry.depth >= depth) {
+    if (ttEntry.flag === "exact") return ttEntry.score;
+    if (ttEntry.flag === "lower") alpha = Math.max(alpha, ttEntry.score);
+    if (ttEntry.flag === "upper") beta = Math.min(beta, ttEntry.score);
+    if (alpha >= beta) return ttEntry.score;
+  }
+
   if (depth === 0 || isTerminal(board)) {
     const win = checkWin(board);
     if (win) {
@@ -124,12 +142,21 @@ function negamax(
 
   let best = -Infinity;
   for (const col of cols) {
+    const row = getDropRow(board, col);
     const next = dropPiece(board, col, piece);
-    const val = -negamax(next, depth - 1, -beta, -alpha, opp);
+    // Incrementally update the Zobrist hash for this move
+    const newHash = hash ^ ZOBRIST[row][col][piece - 1];
+    const val = -negamax(next, depth - 1, -beta, -alpha, opp, newHash, tt);
     if (val > best) best = val;
     if (best > alpha) alpha = best;
     if (alpha >= beta) break; // prune
   }
+
+  // Store result in transposition table
+  const flag: TTFlag =
+    best <= origAlpha ? "upper" : best >= beta ? "lower" : "exact";
+  tt.set(hash, { depth, score: best, flag });
+
   return best;
 }
 
@@ -139,43 +166,67 @@ function negamax(
 
 /** Returns the column index the AI chooses to play. */
 export function getBestMove(board: Board, difficulty: Difficulty): number {
-  const depth = DEPTH_MAP[difficulty];
+  const maxDepth = DEPTH_MAP[difficulty];
   const cols = MOVE_ORDER.filter((c) => board[0][c] === EMPTY);
 
-  // 1. Play winning move immediately (all difficulties)
+  // 1. Opening book (Guru only — instant, no search needed for early game)
+  const bookMove = getOpeningBookMove(board, difficulty);
+  if (bookMove !== null) return bookMove;
+
+  // 2. Play winning move immediately (all difficulties)
   for (const col of cols) {
     const next = dropPiece(board, col, AI);
     if (checkWin(next)?.winner === AI) return col;
   }
 
-  // 2. Block opponent's immediate win (all difficulties)
+  // 3. Block opponent's immediate win (all difficulties)
   for (const col of cols) {
     const next = dropPiece(board, col, PLAYER);
     if (checkWin(next)?.winner === PLAYER) return col;
   }
 
-  // 3. For easy mode, add random noise so the AI occasionally blunders
+  // 4. For easy mode, add random noise so the AI occasionally blunders
   if (difficulty === "easy" && Math.random() < 0.4) {
     const valid = validCols(board);
     return valid[Math.floor(Math.random() * valid.length)];
   }
 
-  // 4. Full negamax search
-  let bestCol = cols[0];
-  let bestScore = -Infinity;
+  // 5. Iterative-deepening negamax with transposition table
+  //    Search depth 1…maxDepth.  Each completed depth primes the TT so the
+  //    next depth benefits from better move ordering.
+  const tt = new TranspositionTable();
+  const startHash = computeBoardHash(board);
 
-  for (const col of cols) {
-    const next = dropPiece(board, col, AI);
-    const score = -negamax(next, depth - 1, -Infinity, Infinity, PLAYER);
-    if (score > bestScore) {
-      bestScore = score;
-      bestCol = col;
+  let bestCol = cols[0];
+
+  for (let depth = 1; depth <= maxDepth; depth++) {
+    let bestScore = -Infinity;
+    let currentBestCol = cols[0];
+
+    for (const col of cols) {
+      const row = getDropRow(board, col);
+      const next = dropPiece(board, col, AI);
+      const newHash = startHash ^ ZOBRIST[row][col][AI - 1];
+      const score = -negamax(
+        next,
+        depth - 1,
+        -Infinity,
+        Infinity,
+        PLAYER,
+        newHash,
+        tt
+      );
+      if (score > bestScore) {
+        bestScore = score;
+        currentBestCol = col;
+      }
     }
+
+    bestCol = currentBestCol;
   }
 
-  // 5. Avoid creating a position where the opponent wins on the next drop
-  //    (i.e., don't set up the opponent by filling a column whose next slot
-  //     above would let them win). Only apply at medium+ difficulty.
+  // 6. Avoid creating a position where the opponent wins on the next drop
+  //    (gift-avoidance). Only apply at medium+ difficulty.
   if (difficulty !== "easy") {
     const safeCol = avoidGift(board, bestCol, cols);
     if (safeCol !== null) return safeCol;
@@ -185,9 +236,10 @@ export function getBestMove(board: Board, difficulty: Difficulty): number {
 }
 
 /**
- * If dropping in `col` would allow the opponent to win by dropping on top of it
- * next turn, try to find a different column that doesn't have this problem.
- * Returns the safe column, or null if bestCol is already safe (or no safe move exists).
+ * If dropping in `col` would allow the opponent to win by dropping on top of
+ * it next turn, try to find a different column that doesn't have this problem.
+ * Returns the safe column, or null if bestCol is already safe (or no safe
+ * move exists).
  */
 function avoidGift(board: Board, bestCol: number, cols: number[]): number | null {
   const afterDrop = dropPiece(board, bestCol, AI);

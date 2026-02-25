@@ -195,3 +195,83 @@ describe("getBestMove — determinism", () => {
     expect(first).toBe(second);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Opening book integration (Guru)
+// ---------------------------------------------------------------------------
+
+describe("getBestMove — opening book (Guru)", () => {
+  it("returns center column (3) on the first AI move when center is free", () => {
+    // Player played col 0; AI should immediately take center
+    const board = dropPiece(emptyBoard(), 0, PLAYER);
+    const col = getBestMove(board, "guru");
+    expect(col).toBe(3);
+  });
+
+  it("returns center (3) when player played col 6 (guru)", () => {
+    const board = dropPiece(emptyBoard(), 6, PLAYER);
+    expect(getBestMove(board, "guru")).toBe(3);
+  });
+
+  it("returns a valid column when player stacked center first (guru)", () => {
+    const board = dropPiece(emptyBoard(), 3, PLAYER);
+    const col = getBestMove(board, "guru");
+    expect(col).toBeGreaterThanOrEqual(0);
+    expect(col).toBeLessThan(COLS);
+    expect(board[0][col]).toBe(EMPTY); // must not suggest a full column
+  });
+
+  it("does NOT force center for easy difficulty on first move", () => {
+    // For easy, we just verify we get a valid column (opening book disabled)
+    const board = dropPiece(emptyBoard(), 0, PLAYER);
+    const col = getBestMove(board, "easy");
+    expect(col).toBeGreaterThanOrEqual(0);
+    expect(col).toBeLessThan(COLS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Iterative deepening — correctness preserved
+// ---------------------------------------------------------------------------
+
+describe("getBestMove — iterative deepening correctness", () => {
+  it("finds a winning move at medium depth", () => {
+    const board = boardFrom([
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "P......",
+      ".AAA...",
+    ]);
+    const col = getBestMove(board, "medium");
+    expect(checkWin(dropPiece(board, col, AI))?.winner).toBe(AI);
+  });
+
+  it("blocks at medium depth", () => {
+    const board = boardFrom([
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "A......",
+      "PPP....",
+    ]);
+    const col = getBestMove(board, "medium");
+    expect(col).toBe(3);
+  });
+
+  it("returns the same best column on two calls (TT cleared between calls)", () => {
+    const board = boardFrom([
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "PAPA...",
+    ]);
+    const col1 = getBestMove(board, "medium");
+    const col2 = getBestMove(board, "medium");
+    expect(col1).toBe(col2);
+  });
+});

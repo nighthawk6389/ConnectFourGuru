@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { PLAYER, AI } from "@/lib/constants";
 import { Cell as CellValue } from "@/lib/constants";
 
@@ -20,7 +21,17 @@ const WIN_RING: Record<number, string> = {
   [AI]: "ring-4 ring-white ring-offset-2 ring-offset-yellow-400",
 };
 
-export default function Cell({ value, isWinCell, isHovered, row }: CellProps) {
+/**
+ * Individual disc cell.
+ * Wrapped with React.memo so only the cells whose props actually change
+ * re-render on each turn (typically just the one new piece + the win cells).
+ */
+const Cell = React.memo(function Cell({
+  value,
+  isWinCell,
+  isHovered,
+  row,
+}: CellProps) {
   const hasPiece = value !== 0;
 
   return (
@@ -29,7 +40,11 @@ export default function Cell({ value, isWinCell, isHovered, row }: CellProps) {
         className={[
           "w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all duration-100",
           hasPiece
-            ? `${PIECE_COLOR[value]} ${isWinCell ? WIN_RING[value] + " scale-110" : ""}`
+            ? `${PIECE_COLOR[value]} ${
+                isWinCell
+                  ? WIN_RING[value] + " scale-110 win-pulse"
+                  : ""
+              }`
             : isHovered
             ? "bg-red-200 opacity-60"
             : "bg-blue-950",
@@ -45,4 +60,6 @@ export default function Cell({ value, isWinCell, isHovered, row }: CellProps) {
       />
     </div>
   );
-}
+});
+
+export default Cell;
