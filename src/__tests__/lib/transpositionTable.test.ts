@@ -4,6 +4,7 @@ import {
   TranspositionTable,
   TTEntry,
   TTFlag,
+  MAX_TT_SIZE,
 } from "@/lib/transpositionTable";
 import { emptyBoard, dropPiece } from "@/lib/game";
 import { ROWS, COLS, PLAYER, AI } from "@/lib/constants";
@@ -180,5 +181,29 @@ describe("TranspositionTable", () => {
     tt.set(hash, entry1);
     tt.set(hash, entry2);
     expect(tt.get(hash)).toEqual(entry2);
+  });
+
+  it("clears the table when MAX_TT_SIZE is exceeded", () => {
+    // Fill the table to capacity
+    for (let i = 0; i < MAX_TT_SIZE; i++) {
+      tt.set(i, { depth: 1, score: 0, flag: "exact" });
+    }
+    expect(tt.size).toBe(MAX_TT_SIZE);
+
+    // Adding one more NEW entry triggers a clear + insert
+    tt.set(MAX_TT_SIZE, { depth: 1, score: 42, flag: "exact" });
+    expect(tt.size).toBe(1);
+    expect(tt.get(MAX_TT_SIZE)?.score).toBe(42);
+  });
+
+  it("does NOT clear when replacing an existing entry at capacity", () => {
+    for (let i = 0; i < MAX_TT_SIZE; i++) {
+      tt.set(i, { depth: 1, score: 0, flag: "exact" });
+    }
+    // Replace an existing entry (same hash, deeper depth)
+    tt.set(0, { depth: 5, score: 99, flag: "exact" });
+    // Table should NOT have been cleared — still at capacity
+    expect(tt.size).toBe(MAX_TT_SIZE);
+    expect(tt.get(0)?.score).toBe(99);
   });
 });

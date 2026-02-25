@@ -7,11 +7,12 @@
 import { renderHook, act } from "@testing-library/react";
 import { useGame } from "@/hooks/useGame";
 import { PLAYER, AI, ROWS, EMPTY } from "@/lib/constants";
-import { getBestMove } from "@/lib/ai";
+import { getBestMove, clearTranspositionTable } from "@/lib/ai";
 
 // Mock the AI so tests are fast and deterministic
 jest.mock("@/lib/ai", () => ({
   getBestMove: jest.fn(() => 3), // always play center column
+  clearTranspositionTable: jest.fn(),
 }));
 
 // Fake timers so we control the AI setTimeout
@@ -203,6 +204,13 @@ describe("useGame — newGame", () => {
     // Score persists across games (only wins change it)
     expect(result.current.score).toEqual({ player: 0, ai: 0, draws: 0 });
   });
+
+  it("clears the transposition table on new game", () => {
+    jest.mocked(clearTranspositionTable).mockClear();
+    const { result } = renderHook(() => useGame());
+    act(() => result.current.newGame());
+    expect(clearTranspositionTable).toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -220,6 +228,13 @@ describe("useGame — setDifficulty", () => {
     const { result } = renderHook(() => useGame());
     act(() => result.current.setDifficulty("victor"));
     expect(result.current.difficulty).toBe("victor");
+  });
+
+  it("clears the transposition table on difficulty change", () => {
+    jest.mocked(clearTranspositionTable).mockClear();
+    const { result } = renderHook(() => useGame());
+    act(() => result.current.setDifficulty("hard"));
+    expect(clearTranspositionTable).toHaveBeenCalled();
   });
 });
 
