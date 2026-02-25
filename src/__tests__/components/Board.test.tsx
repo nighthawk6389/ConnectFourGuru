@@ -1,7 +1,7 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, fireEvent } from "@testing-library/react";
 import Board from "@/components/Board";
-import { emptyBoard, dropPiece } from "@/lib/game";
-import { PLAYER, ROWS, COLS } from "@/lib/constants";
+import { emptyBoard } from "@/lib/game";
+import { ROWS, COLS } from "@/lib/constants";
 
 const noop = () => {};
 

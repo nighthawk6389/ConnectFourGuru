@@ -5,6 +5,7 @@ import Board from "@/components/Board";
 import ScoreBoard from "@/components/ScoreBoard";
 import GameControls from "@/components/GameControls";
 import WinnerModal from "@/components/WinnerModal";
+import VictorSidebar from "@/components/VictorSidebar";
 import { isDraw } from "@/lib/game";
 
 export default function Home() {
@@ -67,6 +68,9 @@ export default function Home() {
         onNewGame={newGame}
         thinking={phase === "thinking"}
       />
+
+      {/* VICTOR collapsible sidebar */}
+      <VictorSidebar />
     </main>
   );
 }

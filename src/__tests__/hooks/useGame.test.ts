@@ -6,9 +6,8 @@
 
 import { renderHook, act } from "@testing-library/react";
 import { useGame } from "@/hooks/useGame";
-import { PLAYER, AI, ROWS, COLS, EMPTY } from "@/lib/constants";
-import { dropPiece } from "@/lib/game";
-import { clearTranspositionTable } from "@/lib/ai";
+import { PLAYER, AI, ROWS, EMPTY } from "@/lib/constants";
+import { getBestMove, clearTranspositionTable } from "@/lib/ai";
 
 // Mock the AI so tests are fast and deterministic
 jest.mock("@/lib/ai", () => ({
@@ -265,8 +264,7 @@ describe("useGame — handleColHover", () => {
 describe("useGame — score tracking", () => {
   it("increments AI score when AI wins", async () => {
     // Override getBestMove to build a vertical AI win in col 3 within 4 AI moves
-    const { getBestMove } = require("@/lib/ai");
-    getBestMove.mockReturnValue(3);
+    jest.mocked(getBestMove).mockReturnValue(3);
 
     const { result } = renderHook(() => useGame());
 
@@ -301,8 +299,7 @@ describe("useGame — score tracking", () => {
 
 describe("useGame — persistent score (localStorage)", () => {
   it("saves score to localStorage after each update", () => {
-    const { getBestMove } = require("@/lib/ai");
-    getBestMove.mockReturnValue(3);
+    jest.mocked(getBestMove).mockReturnValue(3);
 
     const { result } = renderHook(() => useGame());
 
@@ -324,8 +321,7 @@ describe("useGame — persistent score (localStorage)", () => {
   });
 
   it("persists score across a newGame call (score is not reset)", () => {
-    const { getBestMove } = require("@/lib/ai");
-    getBestMove.mockReturnValue(3);
+    jest.mocked(getBestMove).mockReturnValue(3);
 
     const { result } = renderHook(() => useGame());
 

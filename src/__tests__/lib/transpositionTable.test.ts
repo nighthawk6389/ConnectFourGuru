@@ -7,7 +7,7 @@ import {
   MAX_TT_SIZE,
 } from "@/lib/transpositionTable";
 import { emptyBoard, dropPiece } from "@/lib/game";
-import { ROWS, COLS, PLAYER, AI, Board, Cell } from "@/lib/constants";
+import { ROWS, COLS, PLAYER, AI } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
 // Zobrist keys

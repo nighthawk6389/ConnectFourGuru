@@ -85,7 +85,9 @@ export function useGame(): GameState {
 
   // Keep a ref to difficulty so the AI timeout/worker closure always sees current value
   const difficultyRef = useRef<Difficulty>(difficulty);
-  difficultyRef.current = difficulty;
+  useEffect(() => {
+    difficultyRef.current = difficulty;
+  });
 
   // Persistent Web Worker — kept alive between moves so the module-level
   // transposition table inside the worker survives across searches.
