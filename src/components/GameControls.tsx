@@ -5,6 +5,8 @@ import { Difficulty } from "@/lib/constants";
 interface GameControlsProps {
   difficulty: Difficulty;
   onDifficultyChange: (d: Difficulty) => void;
+  playerGoesFirst: boolean;
+  onStartingPlayerChange: (first: boolean) => void;
   onNewGame: () => void;
   thinking: boolean;
 }
@@ -20,6 +22,8 @@ const DIFFICULTIES: { value: Difficulty; label: string }[] = [
 export default function GameControls({
   difficulty,
   onDifficultyChange,
+  playerGoesFirst,
+  onStartingPlayerChange,
   onNewGame,
   thinking,
 }: GameControlsProps) {
@@ -50,6 +54,32 @@ export default function GameControls({
             {label}
           </button>
         ))}
+      </div>
+
+      {/* First-move selector */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => onStartingPlayerChange(true)}
+          className={[
+            "px-4 py-1.5 rounded-full text-sm font-medium transition-all",
+            playerGoesFirst
+              ? "bg-red-500 text-white shadow-lg scale-105"
+              : "bg-white/10 text-gray-300 hover:bg-white/20",
+          ].join(" ")}
+        >
+          You First
+        </button>
+        <button
+          onClick={() => onStartingPlayerChange(false)}
+          className={[
+            "px-4 py-1.5 rounded-full text-sm font-medium transition-all",
+            !playerGoesFirst
+              ? "bg-yellow-500 text-white shadow-lg scale-105"
+              : "bg-white/10 text-gray-300 hover:bg-white/20",
+          ].join(" ")}
+        >
+          CPU First
+        </button>
       </div>
 
       {/* New Game button */}

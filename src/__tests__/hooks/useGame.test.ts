@@ -40,9 +40,14 @@ describe("useGame — initial state", () => {
     );
   });
 
-  it("starts in player phase", () => {
+  it("starts in player phase (player goes first by default)", () => {
     const { result } = renderHook(() => useGame());
     expect(result.current.phase).toBe("player");
+  });
+
+  it("starts with playerGoesFirst = true", () => {
+    const { result } = renderHook(() => useGame());
+    expect(result.current.playerGoesFirst).toBe(true);
   });
 
   it("starts with zero score when localStorage is empty", () => {
@@ -185,11 +190,18 @@ describe("useGame — newGame", () => {
     );
   });
 
-  it("resets phase to 'player'", () => {
+  it("resets phase to 'player' when playerGoesFirst is true", () => {
     const { result } = renderHook(() => useGame());
     act(() => result.current.handleColClick(0)); // → thinking
     act(() => result.current.newGame());
     expect(result.current.phase).toBe("player");
+  });
+
+  it("resets phase to 'thinking' when playerGoesFirst is false", () => {
+    const { result } = renderHook(() => useGame());
+    act(() => result.current.setPlayerGoesFirst(false));
+    act(() => result.current.newGame());
+    expect(result.current.phase).toBe("thinking");
   });
 
   it("clears winResult", () => {
@@ -338,5 +350,40 @@ describe("useGame — persistent score (localStorage)", () => {
 
     // Score must be unchanged after newGame
     expect(result.current.score).toEqual(scoreBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setPlayerGoesFirst / CPU-first mode
+// ---------------------------------------------------------------------------
+
+describe("useGame — setPlayerGoesFirst", () => {
+  it("updates playerGoesFirst state", () => {
+    const { result } = renderHook(() => useGame());
+    expect(result.current.playerGoesFirst).toBe(true);
+    act(() => result.current.setPlayerGoesFirst(false));
+    expect(result.current.playerGoesFirst).toBe(false);
+  });
+
+  it("CPU moves first when newGame is called with playerGoesFirst=false", () => {
+    const { result } = renderHook(() => useGame());
+    act(() => result.current.setPlayerGoesFirst(false));
+    act(() => result.current.newGame());
+    expect(result.current.phase).toBe("thinking");
+
+    // Let the AI move
+    act(() => jest.runOnlyPendingTimers());
+
+    // AI (mocked) plays col 3; phase returns to player
+    expect(result.current.board[ROWS - 1][3]).toBe(AI);
+    expect(result.current.phase).toBe("player");
+  });
+
+  it("player moves first when toggled back to true", () => {
+    const { result } = renderHook(() => useGame());
+    act(() => result.current.setPlayerGoesFirst(false));
+    act(() => result.current.setPlayerGoesFirst(true));
+    act(() => result.current.newGame());
+    expect(result.current.phase).toBe("player");
   });
 });

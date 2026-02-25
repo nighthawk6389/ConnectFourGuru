@@ -15,9 +15,11 @@ export default function Home() {
     winResult,
     score,
     difficulty,
+    playerGoesFirst,
     hoverCol,
     newGame,
     setDifficulty,
+    setPlayerGoesFirst,
     handleColClick,
     handleColHover,
   } = useGame();
@@ -65,6 +67,8 @@ export default function Home() {
       <GameControls
         difficulty={difficulty}
         onDifficultyChange={setDifficulty}
+        playerGoesFirst={playerGoesFirst}
+        onStartingPlayerChange={setPlayerGoesFirst}
         onNewGame={newGame}
         thinking={phase === "thinking"}
       />
