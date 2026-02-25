@@ -22,7 +22,7 @@ export type Difficulty = "easy" | "medium" | "hard" | "guru" | "victor";
 
 export const DEPTH_MAP: Record<Difficulty, number> = {
   easy: 3,
-  medium: 6,
+  medium: 5,
   hard: 10,
   guru: 14,
   victor: 14,
